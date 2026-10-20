@@ -1,0 +1,55 @@
+# ---- Secrets and environment files (never commit real values) ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+
+# ---- WhatsApp / OpenWA session data (full account access; never commit) ----
+sessions/
+**/sessions/
+.wwebjs_auth/
+.wwebjs_cache/
+**/baileys/
+openwa-data/
+data/
+*.sqlite
+*.sqlite3
+*.db
+
+# ---- Database dumps and backups ----
+dumps/
+backups/
+*.dump
+*.pgdump
+*.backup
+*.bak
+*.sql.gz
+*.sql.gpg
+*.sql.age
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- Editors / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---- Trial evidence may contain phone numbers; keep it out of git ----
+trial/evidence/
