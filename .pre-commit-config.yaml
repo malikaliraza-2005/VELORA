@@ -1,0 +1,25 @@
+# Local git hooks. Install once per clone:
+#   uvx pre-commit install
+# Secret scanning (gitleaks) blocks commits that contain credentials (P1-T4).
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.1
+    hooks:
+      - id: ruff-check
+        files: ^backend/
+        args: [--config, backend/pyproject.toml]
+      - id: ruff-format
+        files: ^backend/
+        args: [--config, backend/pyproject.toml]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: detect-private-key
+      - id: check-merge-conflict
