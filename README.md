@@ -2,7 +2,7 @@
 
 Pakistan-first, WhatsApp-based ordering SaaS for restaurants and cloud kitchens (hotels later).
 
-> **Project status:** early build. P1 and P2 are complete. **P3 (onboarding and staff identity)** is in progress.
+> **Project status:** early build. P1–P3 are complete (repository, database and tenant isolation, staff identity).
 > Nothing connects to WhatsApp yet.
 > See [`docs/planning/implementation-status.md`](docs/planning/implementation-status.md).
 

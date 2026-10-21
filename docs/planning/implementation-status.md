@@ -14,7 +14,7 @@
 | **P0 live OpenWA validation** | **Paused** until a test SIM and the required setup exist (see "Resuming the live test"). |
 | **P1** | **Complete (2026-10-21).** Both exit criteria verified in CI. |
 | **P2** | **Complete (2026-10-21).** Authorised by the owner ("Start P2"). Merged in PR #3; CI green. |
-| **P3** | **Implemented; awaiting CI and merge.** Authorised by the owner on 2026-10-21 ("Start P3"). See "P3 task evidence". |
+| **P3** | **Complete (2026-10-21).** Authorised by the owner ("Start P3"). PR #4; all five exit criteria verified in CI. See "P3 task evidence". |
 | **P4–P13** | **Not started. Not authorised.** |
 | **Provider-neutral track (AD-25)** | Owner decision 2026-10-21: the provider-neutral parts of P5, and P6–P9, may be built against the `FakeProvider` before the OpenWA Go, each once it is authorised. |
 | **OpenWA adapter, real WhatsApp traffic, P10–P13** | **Blocked** until the live validation is complete and the owner gives a Go (V-01). |
@@ -40,7 +40,7 @@ A reduced live-trial variant that fits these constraints is **proposed, not appr
 | [P0 Pre-implementation gates](phases/p00-pre-implementation-gates.md) | **Desk research in progress; live test paused** | Test SIM; machine to run OpenWA; volunteers (reduced variant proposed); lawyer/accountant budget | Desk review notes (see P0 tasks) | Finish desk tasks; owner decides on the reduced trial variant |
 | [P1 Repository foundation](phases/p01-repository-foundation.md) | **Complete** (2026-10-21) | — | CI runs 39587396126 (main) and 39587837550 (PR #2 self-test); see "P1 task evidence" | Owner: apply the branch protection rule (see README) |
 | [P2 Database and tenant isolation](phases/p02-database-and-tenant-isolation.md) | **Complete** (2026-10-21) | — | PR #3; CI runs 39590467933 (PR) and 39590889951 (main); 187 tests | — |
-| [P3 Onboarding and staff identity](phases/p03-onboarding-and-staff-identity.md) | **Implemented; awaiting CI and merge** | — (B7 resolved for the pilot: manual delivery, AD-27) | Local: 315 tests passed against PostgreSQL 17; see "P3 task evidence" | Green CI, then merge |
+| [P3 Onboarding and staff identity](phases/p03-onboarding-and-staff-identity.md) | **Complete** (2026-10-21) | — (B7 resolved for the pilot: manual delivery, AD-27) | PR #4; CI run 39594079256 (315 tests); see "P3 task evidence" | Owner: review AD-27; authorise P4 when ready |
 | [P4 Menu, availability and settings](phases/p04-menu-availability-and-settings.md) | Not started; not authorised | P2, P3; tax values (accountant) | — | — |
 | [P5 Provider abstraction and OpenWA adapter](phases/p05-whatsapp-provider-and-openwa-adapter.md) | Not started — **blocked** | **Live validation + Go (V-01)**; V-02, V-04, V-05, V-06, V-07, V-08 | — | — |
 | [P6 Conversation workflows](phases/p06-conversation-workflows.md) | Not started — blocked (depends on P5) | P4, P5; AI model choice; V-09 | — | — |
@@ -114,14 +114,14 @@ Implementation choices are recorded as **ADOPTED (delegated)** in decisions AD-2
 
 | Task | Status | Evidence (tests in `backend/tests/`) |
 |---|---|---|
-| P3-T1 Founder onboarding tools | Implemented (command-line tool, AD-27) | `db/test_onboarding.py`: go-live refused without both records (tool and database); audit rows exist; records immutable; platform role scoped to one tenant |
-| P3-T2 Magic-link login | Implemented | `api/test_login_and_sessions.py`: reused link fails; expired link fails; forged tenant fails; rate limit refuses |
-| P3-T3 Device sessions | Implemented | Same file: logout, log out all devices, owner revocation, role change and removal each give 401; idle and absolute expiry (simulated clock); CSRF; cross-tenant access denied |
-| P3-T4 Invite flow and roles | Implemented | `identity/test_units.py` (matrix); `api/test_roles_and_pins.py` (kitchen device can't change menu or settings) |
-| P3-T5 Payment PIN | Implemented | `api/test_roles_and_pins.py`: confirming without a valid PIN is rejected and logged; lockout; kitchen-device flow |
-| P3-T6 Audit logging | Implemented | `api/test_audit_coverage.py`: every state-changing endpoint writes an audit row, and the test fails if a new endpoint is not covered |
+| P3-T1 Founder onboarding tools | Done (command-line tool, AD-27) | `db/test_onboarding.py`: go-live refused without both records (tool and database); audit rows exist; records immutable; platform role scoped to one tenant |
+| P3-T2 Magic-link login | Done | `api/test_login_and_sessions.py`: reused link fails; expired link fails; forged tenant fails; rate limit refuses |
+| P3-T3 Device sessions | Done | Same file: logout, log out all devices, owner revocation, role change and removal each give 401; idle and absolute expiry (simulated clock); CSRF; cross-tenant access denied |
+| P3-T4 Invite flow and roles | Done | `identity/test_units.py` (matrix); `api/test_roles_and_pins.py` (kitchen device can't change menu or settings) |
+| P3-T5 Payment PIN | Done | `api/test_roles_and_pins.py`: confirming without a valid PIN is rejected and logged; lockout; kitchen-device flow |
+| P3-T6 Audit logging | Done | `api/test_audit_coverage.py`: every state-changing endpoint writes an audit row, and the test fails if a new endpoint is not covered |
 
-**P3 exit criteria:** all five are covered by passing tests locally: 315 passed against PostgreSQL 17, with format, lint, `mypy --strict` and gitleaks clean. **Not yet verified in CI.**
+**P3 exit criteria:** all five are **met in CI**: [run 39594079256](https://github.com/malikaliraza-2005/VELORA/actions/runs/39594079256) (PR #4). 315 tests passed against PostgreSQL 17, and the secret scan was clean.
 
 **Findings for later phases:**
 - **P8:** call `StaffService.verify_payment_pin` before confirming a payment. The test stand-in shows the pattern.
@@ -169,7 +169,7 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 
 | Date | Change |
 |---|---|
-| 2026-10-21 | Owner authorised **P3** ("Start P3"). P3 implemented on `feature/p3-staff-identity`, and B7 resolved for the pilot (manual delivery). Decisions AD-26 (P2 choices) and AD-27 (P3 choices) recorded as ADOPTED (delegated). |
+| 2026-10-21 | Owner authorised **P3** ("Start P3"). P3 implemented and verified in CI (PR #4, run 39594079256), and B7 resolved for the pilot (manual delivery). Decisions AD-26 (P2 choices) and AD-27 (P3 choices) recorded as ADOPTED (delegated). |
 | 2026-10-21 | **P2 complete.** Owner authorised P2 ("Start P2"); merged in PR #3, CI green (runs 39590467933 and 39590889951). |
 | 2026-10-21 | **P1 complete.** The PR #2 CI self-test proved fake-key detection (run 39587837550). |
 | 2026-10-21 | PR #1 merged; CI green on `main` (run 39587396126). At the owner's request, the commit history on `main` was rewritten to remove AI co-author trailers (contents unchanged; force-pushed with lease; local backup tag kept). New SHAs: `cd57482`, `24ee91b`, `4e40fae`, `d4e134a`. Self-test branch for fake-key detection opened. |

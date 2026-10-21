@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Authorisation** | **AUTHORISED** by the owner, 2026-10-21 ("Start P3"). Implementation choices in AD-27. |
+| **Authorisation** | **AUTHORISED** by the owner, 2026-10-21 ("Start P3"). **Complete** (PR #4; implementation choices in AD-27). |
 | **Depends on** | P2 |
 | **Blocks** | P4, P8, P9 |
 | **Effort (estimate)** | about 1 week |
