@@ -10,7 +10,7 @@ from __future__ import annotations
 import itertools
 import re
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -54,24 +54,51 @@ def test_the_table_is_consistent() -> None:
     assert len(pairs) == len(set(pairs))
     for rule in TRANSITIONS:
         assert rule.actors and rule.from_status != rule.to_status
-        assert rule.from_status not in lifecycle.TERMINAL
+        # P8: only the late-payment review leaves `expired`.
+        assert rule.from_status not in lifecycle.TERMINAL or (
+            (rule.from_status, rule.to_status) in lifecycle.PAYMENT_MOVES
+        )
     # Every status an order can start in, or reach, can also be left, unless it ends the order.
     reachable = set(lifecycle.INITIAL_STATUS.values()) | {r.to_status for r in TRANSITIONS}
     for status in reachable - lifecycle.TERMINAL:
         assert any(r.from_status == status for r in TRANSITIONS), status
 
 
+def _every_order(db: PgDatabase, shop: Shop) -> dict[tuple[str, str, str], uuid.UUID]:
+    """One order per payment, fulfilment and status. Each has a verified payment, so the paid
+    moves are judged by the table alone (P8; the ledger check itself is in
+    db/test_payments_ledger.py)."""
+    tenant = shop.tenant.value
+    staff = staff_id_of(db, shop)
+    due = datetime.now(UTC) + timedelta(hours=1)
+    with db.admin() as admin:
+        orders = {
+            (payment, fulfilment, status): insert_order(
+                admin,
+                tenant,
+                status=status,
+                payment_method=payment,
+                fulfilment=fulfilment,
+                # Placement sets it on every transfer order.
+                payment_due_at=due if payment == "transfer" else None,
+            )
+            for (payment, fulfilment), status in itertools.product(KINDS, STATUSES)
+        }
+        for (payment, _, _), order_id in orders.items():
+            admin.execute(
+                "INSERT INTO velora.payments (tenant_id, order_id, method, amount_paisa, "
+                "status, reference, reference_key, verified_by_staff_id, verified_at) "
+                "VALUES (%s, %s, %s, 90000, 'verified', %s, %s, %s, now())",
+                (tenant, order_id, payment, order_id.hex[:12], order_id.hex[:12].upper(), staff),
+            )
+    return orders
+
+
 def test_the_database_guard_matches_the_transition_table(db: PgDatabase, shop: Shop) -> None:
     """Every (from, to) pair, for every payment and fulfilment: the database accepts exactly
     the moves the table has."""
     tenant = shop.tenant.value
-    with db.admin() as admin:
-        orders = {
-            (payment, fulfilment, status): insert_order(
-                admin, tenant, status=status, payment_method=payment, fulfilment=fulfilment
-            )
-            for (payment, fulfilment), status in itertools.product(KINDS, STATUSES)
-        }
+    orders = _every_order(db, shop)
     mismatches = []
     with db.app() as conn, conn.transaction(force_rollback=True):
         conn.execute("SELECT set_config('app.tenant_id', %s, true)", (str(tenant),))
@@ -100,15 +127,8 @@ def test_illegal_transitions_are_rejected_by_the_engine(
 ) -> None:
     """Every (from, to, actor) for every payment and fulfilment: `transition` makes exactly
     the moves the table allows that actor, and refuses everything else unchanged."""
-    tenant = shop.tenant.value
     staff = staff_id_of(db, shop)
-    with db.admin() as admin:
-        orders = {
-            (payment, fulfilment, status): insert_order(
-                admin, tenant, status=status, payment_method=payment, fulfilment=fulfilment
-            )
-            for (payment, fulfilment), status in itertools.product(KINDS, STATUSES)
-        }
+    orders = _every_order(db, shop)
     actors = [Actor("customer", uuid.uuid4()), Actor("staff", staff), lifecycle.SYSTEM_ACTOR]
 
     async def scenario(env: Env) -> None:

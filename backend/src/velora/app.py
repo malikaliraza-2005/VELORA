@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from psycopg_pool import AsyncConnectionPool
 
 from velora import __version__
-from velora.api import conversations, menu, ordering, orders
+from velora.api import conversations, menu, ordering, orders, payments
 from velora.api.deps import Services
 from velora.api.routes import router
 from velora.clock import Clock, SystemClock
@@ -33,6 +33,7 @@ from velora.identity.staff import StaffService
 from velora.menu.service import MenuService
 from velora.ordering.service import OrderingService
 from velora.orders.service import OrderService
+from velora.payments.service import PaymentService
 
 # Per client address: 10 login attempts per 5 minutes.
 LOGIN_RATE_LIMIT = 10
@@ -48,14 +49,16 @@ _ERROR_STATUS: dict[type[IdentityError], int] = {
 
 
 def build_services(settings: Settings, database: Database, clock: Clock) -> Services:
+    staff = StaffService(database, clock)
     return Services(
         settings=settings,
         clock=clock,
         sessions=SessionService(database, clock),
-        staff=StaffService(database, clock),
+        staff=staff,
         menu=MenuService(database, clock),
         ordering=OrderingService(database, clock),
         orders=OrderService(database, clock),
+        payments=PaymentService(database, clock, staff),
         conversations=ConversationService(database, clock),
         login_limiter=RateLimiter(LOGIN_RATE_LIMIT, LOGIN_RATE_WINDOW, clock),
     )
@@ -86,7 +89,10 @@ def create_app(
 
     @app.exception_handler(IdentityError)
     async def identity_error(request: Request, exc: IdentityError) -> JSONResponse:
-        code = _ERROR_STATUS.get(type(exc), status.HTTP_400_BAD_REQUEST)
+        code = next(
+            (code for kind, code in _ERROR_STATUS.items() if isinstance(exc, kind)),
+            status.HTTP_400_BAD_REQUEST,
+        )
         if isinstance(exc, ValidationProblemsError):
             return JSONResponse(
                 {"detail": str(exc), "problems": exc.problems},
@@ -103,4 +109,5 @@ def create_app(
     app.include_router(ordering.router)
     app.include_router(conversations.router)
     app.include_router(orders.router)
+    app.include_router(payments.router)
     return app

@@ -176,7 +176,8 @@ def test_anonymisation_cannot_reach_another_tenant(db: PgDatabase, tenants: Seed
         ("verified", False, "TXN123", False),  # no staff member
         ("verified", True, None, False),  # transfer without a reference
         ("verified", True, "TXN123", True),
-        ("customer_claimed", False, None, True),
+        ("pending", False, None, False),  # P8: the ledger holds only verified and reversed
+        ("reversed", True, None, False),  # a reversal must name the entry and a reason
     ],
 )
 def test_transfer_verification_needs_staff_and_reference(
@@ -192,8 +193,8 @@ def test_transfer_verification_needs_staff_and_reference(
         _as_tenant(conn, a["tenants"])
         query = (
             "INSERT INTO velora.payments (tenant_id, order_id, method, amount_paisa, status, "
-            "reference, verified_by_staff_id, verified_at) "
-            "VALUES (%s, %s, 'transfer', 105000, %s, %s, %s, "
+            "reference, reference_key, verified_by_staff_id, verified_at) "
+            "VALUES (%s, %s, 'transfer', 105000, %s, %s, %s, %s, "
             "CASE WHEN %s THEN now() END)"
         )
         params = (
@@ -201,6 +202,7 @@ def test_transfer_verification_needs_staff_and_reference(
             a["orders"],
             status,
             reference,
+            None if reference is None else reference.upper(),
             a["staff_members"] if staff else None,
             staff,
         )

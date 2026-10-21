@@ -2,6 +2,9 @@
 
 Every privileged endpoint names the permission it needs; nothing checks roles directly. Menu
 endpoints (P4) must require `MENU_EDIT`, payment confirmation (P8) `PAYMENTS_CONFIRM`.
+
+The payment reconciliation report and the reversal of a verified payment are the owner's
+alone (P8-T6): they are the check on everyone else's confirmations.
 """
 
 from __future__ import annotations
@@ -23,6 +26,11 @@ class Permission(StrEnum):
     CHATS_HANDLE = "chats.handle"
     # Held by the person whose PIN confirms a payment, not by the session (see P3-T5).
     PAYMENTS_CONFIRM = "payments.confirm"
+    # P8-T6: owner only.
+    PAYMENTS_RECONCILE = "payments.reconcile"
+    PAYMENTS_REVERSE = "payments.reverse"
+    # P8-T2: the cash-on-delivery blocklist.
+    CUSTOMERS_BLOCK_COD = "customers.block_cod"
     MENU_EDIT = "menu.edit"
     SETTINGS_EDIT = "settings.edit"
     STAFF_VIEW = "staff.view"
@@ -30,9 +38,13 @@ class Permission(StrEnum):
     STAFF_MANAGE = "staff.manage"
 
 
+OWNER_ONLY: frozenset[Permission] = frozenset(
+    {Permission.STAFF_MANAGE, Permission.PAYMENTS_RECONCILE, Permission.PAYMENTS_REVERSE}
+)
+
 MATRIX: dict[Role, frozenset[Permission]] = {
     Role.OWNER: frozenset(Permission),
-    Role.MANAGER: frozenset(Permission) - {Permission.STAFF_MANAGE},
+    Role.MANAGER: frozenset(Permission) - OWNER_ONLY,
     Role.KITCHEN: frozenset(
         {Permission.ORDERS_VIEW, Permission.ORDERS_UPDATE, Permission.PAYMENTS_CONFIRM}
     ),

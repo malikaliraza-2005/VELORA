@@ -1,5 +1,5 @@
 """Per-tenant ordering settings (P4-T6): delivery, pickup, tax, COD, transfers and capacity,
-plus the AI switch (P6-T4).
+plus the AI switch (P6-T4) and the transfer account details (P8-T3).
 
 The row is created with the database defaults the first time it is needed. The limits here
 match the table's CHECK constraints, which remain the final guard.
@@ -37,12 +37,15 @@ class OrderingSettings:
     pause_reason: str | None
     # AI proposals for free text (P6-T4). Off: customers use the numbered menu only.
     ai_enabled: bool = True
+    # The restaurant's own bank or wallet account, sent to the customer after a transfer
+    # order (P8-T3). None: not set, so transfer can't be offered.
+    transfer_account_details: str | None = None
 
     def is_paused(self, now: datetime) -> bool:
         return self.paused_until is not None and now < self.paused_until
 
     def editable(self) -> dict[str, Any]:
-        return {k: v for k, v in asdict(self).items() if k in BOUNDS or k in FLAGS}
+        return {k: v for k, v in asdict(self).items() if k in BOUNDS or k in FLAGS or k in TEXTS}
 
 
 _COLUMNS = ", ".join(f.name for f in fields(OrderingSettings))
@@ -50,6 +53,9 @@ _COLUMNS = ", ".join(f.name for f in fields(OrderingSettings))
 FLAGS = frozenset(
     {"delivery_enabled", "takeaway_enabled", "cod_enabled", "transfer_enabled", "ai_enabled"}
 )
+
+# Free text that may be None: field -> longest length.
+TEXTS: dict[str, int] = {"transfer_account_details": 500}
 
 # Field -> (lowest, highest, may be None).
 BOUNDS: dict[str, tuple[int, int, bool]] = {
@@ -82,10 +88,20 @@ async def load_settings(
 
 def apply_changes(current: OrderingSettings, changes: dict[str, Any]) -> OrderingSettings:
     """`current` with `changes` applied, after checking every value. Raises InvalidInputError."""
+    changes = dict(changes)
     for name, value in changes.items():
         if name in FLAGS:
             if not isinstance(value, bool):
                 raise InvalidInputError(f"{name} must be true or false")
+        elif name in TEXTS:
+            if value is not None:
+                if not isinstance(value, str):
+                    raise InvalidInputError(f"{name} must be text")
+                value = changes[name] = value.strip()
+                if not value:
+                    raise InvalidInputError(f"{name} can't be blank; send null to clear it")
+                if len(value) > TEXTS[name]:
+                    raise InvalidInputError(f"{name} is at most {TEXTS[name]} characters")
         elif name in BOUNDS:
             low, high, nullable = BOUNDS[name]
             if value is None:

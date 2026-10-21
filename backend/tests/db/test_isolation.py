@@ -38,6 +38,7 @@ TENANT_TABLES: dict[str, str] = {
     "order_items": "tenant_id",
     "order_transitions": "tenant_id",
     "payments": "tenant_id",
+    "payment_evidence": "tenant_id",
     "audit_log": "tenant_id",
     "channel_events": "tenant_id",
     "menu_versions": "tenant_id",
@@ -101,6 +102,9 @@ APPEND_ONLY = {
     "order_transitions",
     # P7: an order's lines are its price snapshot.
     "order_items",
+    # P8: the payments ledger (corrections are new rows) and customer evidence.
+    "payments",
+    "payment_evidence",
     "audit_log",
     "channel_events",
     "menu_publications",

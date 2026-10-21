@@ -93,7 +93,7 @@ def test_illegal_moves_and_payment_verification_are_refused(
     status, body = _move(
         owner, transfer, {"from": "awaiting_transfer", "to": "paid_staff_verified"}
     )
-    assert status == 403 and "P8" in body["detail"]
+    assert status == 403 and "reference and a PIN" in body["detail"]
     # An unknown status is a validation error.
     assert _move(owner, cod, {"from": "cod_confirmed", "to": "eaten"})[0] == 422
 

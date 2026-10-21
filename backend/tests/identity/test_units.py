@@ -90,7 +90,8 @@ def test_role_permission_matrix() -> None:
     """The whole matrix, written out, so any change to it is a deliberate test change."""
     expected = {
         Role.OWNER: set(Permission),
-        Role.MANAGER: set(Permission) - {Permission.STAFF_MANAGE},
+        Role.MANAGER: set(Permission)
+        - {Permission.STAFF_MANAGE, Permission.PAYMENTS_RECONCILE, Permission.PAYMENTS_REVERSE},
         Role.KITCHEN: {
             Permission.ORDERS_VIEW,
             Permission.ORDERS_UPDATE,
@@ -119,6 +120,12 @@ def test_kitchen_device_cannot_change_menu_settings_staff_or_payments(
 
 def test_only_the_owner_manages_staff() -> None:
     assert [r for r in Role if allows(r, Permission.STAFF_MANAGE)] == [Role.OWNER]
+
+
+@pytest.mark.parametrize("permission", [Permission.PAYMENTS_RECONCILE, Permission.PAYMENTS_REVERSE])
+def test_only_the_owner_reconciles_and_reverses_payments(permission: Permission) -> None:
+    """P8-T6: the owner's report and reversal are the check on everyone else."""
+    assert [r for r in Role if allows(r, permission)] == [Role.OWNER]
 
 
 def test_kitchen_device_is_not_a_person() -> None:

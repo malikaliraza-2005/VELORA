@@ -63,6 +63,7 @@ SETTINGS = OrderingSettings(
     max_orders_per_slot=None,
     paused_until=None,
     pause_reason=None,
+    transfer_account_details="JazzCash 03001234567 (Test Kitchen)",
 )
 REGULAR = (("Size", "Regular"),)
 

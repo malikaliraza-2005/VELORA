@@ -26,6 +26,7 @@ from velora.identity.tokens import csrf_matches
 from velora.menu.service import MenuService
 from velora.ordering.service import OrderingService
 from velora.orders.service import OrderService
+from velora.payments.service import PaymentService
 
 SESSION_COOKIE = "__Host-velora_session"
 CSRF_HEADER = "X-CSRF-Token"
@@ -41,6 +42,7 @@ class Services:
     menu: MenuService
     ordering: OrderingService
     orders: OrderService
+    payments: PaymentService
     conversations: ConversationService
     login_limiter: RateLimiter
 

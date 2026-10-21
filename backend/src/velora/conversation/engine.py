@@ -32,6 +32,12 @@ savepoint of this transaction: if anything is refused or fails, nothing of the o
 and the customer gets a clear message (an updated summary to confirm, the cart, or an apology).
 CANCEL clears a cart being built; with nothing being built it cancels the customer's placed
 order, if it hasn't been accepted yet.
+
+**Payments (P8, AD-03).** A transfer order's confirmation carries the restaurant's account
+details. A screenshot, a document or "I have paid" while a transfer order is open is kept as
+evidence for staff (`velora.payments.evidence`) and changes nothing: only staff with the
+transaction reference and a PIN verify a payment. Evidence is kept even while the chat is
+handed over or the customer has opted out; the reply is not.
 """
 
 from __future__ import annotations
@@ -75,6 +81,7 @@ from velora.ordering.pricing import (
 )
 from velora.ordering.settings import OrderingSettings, load_settings
 from velora.orders import lifecycle, placement
+from velora.payments import evidence
 from velora.redaction import error_text
 
 log = logging.getLogger(__name__)
@@ -228,6 +235,8 @@ class _Turn:
     opt_out: bool | None = None
     handoff_reason: str | None = None
     disclose: bool = False
+    # The inbound message being handled (evidence is kept once per message).
+    event_id: uuid.UUID | None = None
 
     def say(self, *texts: str) -> None:
         self.replies.extend(t for t in texts if t)
@@ -276,11 +285,8 @@ class _Data:
     async def gate(self) -> gate.GateDecision:
         return await gate.check_new_cart(self.conn, self.tenant, self.now)
 
-    async def has_orders(self, customer_id: uuid.UUID) -> bool:
-        cur = await self.conn.execute(
-            "SELECT 1 FROM velora.orders WHERE customer_id = %s LIMIT 1", (customer_id,)
-        )
-        return await cur.fetchone() is not None
+    async def cod_standing(self, customer_id: uuid.UUID) -> placement.CodStanding:
+        return await placement.cod_standing(self.conn, customer_id)
 
 
 class ConversationEngine:
@@ -305,7 +311,7 @@ class ConversationEngine:
         now = self._clock.now()
         await lock_conversation(conn, event.channel_id, sender)
         chat = await self._load(conn, tenant, event.channel_id, sender, now)
-        turn = _Turn(chat, now, chat.state, dict(chat.context))
+        turn = _Turn(chat, now, chat.state, dict(chat.context), event_id=event.id)
         turn.prior_misses = int(turn.context.pop("misses", 0))
         data = _Data(conn, tenant, now)
         await self._step(
@@ -314,6 +320,7 @@ class ConversationEngine:
             kind=str(payload.get("kind") or "text"),
             text=str(payload.get("text") or ""),
             message_id=str(payload.get("provider_message_id") or ""),
+            media=payload.get("media"),
         )
         await self._save(conn, tenant, turn, data, event)
 
@@ -429,11 +436,23 @@ class ConversationEngine:
     # Dispatch ------------------------------------------------------------------------------
 
     async def _step(
-        self, turn: _Turn, data: _Data, *, kind: str, text: str, message_id: str
+        self,
+        turn: _Turn,
+        data: _Data,
+        *,
+        kind: str,
+        text: str,
+        message_id: str,
+        media: dict[str, Any] | None = None,
     ) -> None:
         chat = turn.chat
         words = normalise(text)
         exact = text.strip()
+        # P8-T3: a screenshot or receipt for an open transfer order is kept for staff, whatever
+        # state the chat is in. It never changes a payment or order status.
+        attached = None
+        if kind in evidence.MEDIA_KINDS:
+            attached = await self._keep_evidence(turn, data, evidence.MEDIA_KINDS[kind], media)
         if chat.opted_out:
             if exact.upper() == "START":
                 turn.opt_out, turn.disclose = False, True
@@ -454,6 +473,9 @@ class ConversationEngine:
         if kind == "location" and turn.state == "address":
             await self._address(turn, data, None, message_id)
             return
+        if attached is not None:
+            turn.say(copy.evidence_received(attached.reference, expired=attached.expired))
+            return
         if kind != "text" or not words:
             turn.say(copy.TEXT_ONLY)
             return
@@ -469,6 +491,8 @@ class ConversationEngine:
             await self._show_cart(turn, data)
         elif words == "checkout":
             await self._checkout(turn, data)
+        elif evidence.is_payment_claim(words) and await self._payment_claim(turn, data):
+            pass
         else:
             await self._state_input(turn, data, text, words)
 
@@ -583,7 +607,8 @@ class ConversationEngine:
 
     async def _status(self, turn: _Turn, data: _Data) -> None:
         cur = await data.conn.execute(
-            "SELECT o.order_number, o.status, o.updated_at, t.order_number_prefix "
+            "SELECT o.order_number, o.status, o.updated_at, t.order_number_prefix, "
+            "o.total_paisa, o.payment_due_at "
             "FROM velora.orders o JOIN velora.tenants t ON t.id = o.tenant_id "
             "WHERE o.customer_id = %s ORDER BY o.created_at DESC LIMIT 1",
             (turn.chat.customer_id,),
@@ -592,8 +617,50 @@ class ConversationEngine:
         if row is None:
             turn.say(copy.NO_ORDERS)
             return
-        number, status, since, prefix = row
-        turn.say(copy.order_status(lifecycle.order_reference(prefix, number), status, since))
+        number, status, since, prefix, total, due = row
+        reference = lifecycle.order_reference(prefix, number)
+        turn.say(copy.order_status(reference, status, since))
+        if status == "awaiting_transfer" and due is not None:
+            settings = await data.settings()
+            turn.say(
+                copy.transfer_reminder(reference, total, due, settings.transfer_account_details)
+            )
+
+    # Payment evidence (P8-T3) ----------------------------------------------------------------
+
+    async def _keep_evidence(
+        self,
+        turn: _Turn,
+        data: _Data,
+        kind: evidence.EvidenceKind,
+        media: dict[str, Any] | None = None,
+    ) -> evidence.EvidenceOrder | None:
+        """Attach this message to the customer's open transfer order, if there is one."""
+        if turn.event_id is None:
+            return None
+        order = await evidence.order_for_evidence(data.conn, turn.chat.customer_id, turn.now)
+        if order is None:
+            return None
+        await evidence.record(
+            data.conn,
+            data.tenant,
+            order,
+            kind=kind,
+            customer_id=turn.chat.customer_id,
+            inbox_event_id=turn.event_id,
+            received_at=turn.now,
+            media=media,
+        )
+        return order
+
+    async def _payment_claim(self, turn: _Turn, data: _Data) -> bool:
+        """A customer says they paid: noted for staff on the open transfer order. False if
+        there is none."""
+        order = await self._keep_evidence(turn, data, "text_claim")
+        if order is None:
+            return False
+        turn.say(copy.evidence_received(order.reference, expired=order.expired))
+        return True
 
     # Menu and cart (P6-T3) -----------------------------------------------------------------
 
@@ -833,7 +900,8 @@ class ConversationEngine:
                 )
             )
         elif intent == "payment_claim":
-            turn.say(copy.PAYMENT_CLAIM)
+            if not await self._payment_claim(turn, data):
+                turn.say(copy.PAYMENT_CLAIM)
         else:
             self._miss(turn)
 
@@ -1012,7 +1080,7 @@ class ConversationEngine:
         if live is None:
             await self._show_menu(turn, data)
             return
-        first_order = not await data.has_orders(turn.chat.customer_id)
+        standing = await data.cod_standing(turn.chat.customer_id)
         methods: list[PaymentMethod] = []
         # Why a method can't be offered: shown only if none can. The COD first-order limit
         # is worth telling the customer even when transfer remains (AD-03).
@@ -1028,8 +1096,12 @@ class ConversationEngine:
                 if exc.code != "payment_unavailable":
                     refusals.append(str(exc))
                 continue
+            if method == "cod" and standing.blocked:
+                cod_note = copy.COD_BLOCKED
+                refusals.append(cod_note)
+                continue
             if method == "cod" and not cod_allowed(
-                settings, quote.total_paisa, first_order=first_order
+                settings, quote.total_paisa, first_order=standing.first_order
             ):
                 limit = settings.cod_first_order_limit_paisa or 0
                 cod_note = (

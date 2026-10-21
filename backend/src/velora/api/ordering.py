@@ -35,11 +35,13 @@ class SettingsOut(BaseModel):
     transfer_window_minutes: int
     max_orders_per_slot: int | None
     ai_enabled: bool
+    transfer_account_details: str | None
 
 
 class SettingsChange(BaseModel):
     """Only the fields sent are changed. Send null to clear a tax rate, the COD first-order
-    limit or the capacity cap. Ranges are checked by the service."""
+    limit, the capacity cap or the transfer account details. Ranges are checked by the
+    service."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -57,6 +59,7 @@ class SettingsChange(BaseModel):
     transfer_window_minutes: int | None = None
     max_orders_per_slot: int | None = None
     ai_enabled: bool | None = None
+    transfer_account_details: str | None = Field(default=None, max_length=500)
 
 
 class PauseRequest(BaseModel):

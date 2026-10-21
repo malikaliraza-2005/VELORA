@@ -24,6 +24,8 @@ from velora.ordering.pricing import CartLine, Quote, QuoteRejected
 
 # Placeholder tax rates for tests only. The real rates wait for the accountant (B3).
 PLACEHOLDER_TAX = {"tax_cod_bps": 1600, "tax_transfer_bps": 500}
+# P8-T3: transfer is offered only with the restaurant's account details.
+TRANSFER_DETAILS = {"transfer_account_details": "Easypaisa 03001234567 (Test Kitchen)"}
 
 
 def patch(device: Device, **changes: Any) -> Any:
@@ -61,7 +63,7 @@ def quote(
 def live(owner: Device) -> Device:
     """A restaurant with a published menu and placeholder tax: ready to take carts."""
     publish_menu(owner)
-    assert patch(owner, **PLACEHOLDER_TAX).status_code == 200
+    assert patch(owner, **PLACEHOLDER_TAX, **TRANSFER_DETAILS).status_code == 200
     return owner
 
 
