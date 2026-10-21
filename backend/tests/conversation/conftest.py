@@ -35,7 +35,7 @@ from velora.ai.proposer import Proposal, ProposalRequest, ProposerError
 from velora.conversation.engine import ConversationEngine
 from velora.messaging.inbox import InboxProcessor, Ingress
 from velora.messaging.outbox import apply_delivery_status
-from velora.messaging.provider import InboundMessage, MessageKind
+from velora.messaging.provider import InboundMedia, InboundMessage, MessageKind
 
 # (category, [(sku, name, price, [(group, min, max, [(option, delta)])])])
 MENU: list[
@@ -64,6 +64,7 @@ MENU: list[
 PRICES = {"ZINGER": 65000, "BEEF": 89000, "COKE": 12000, "SPRITE": 12000}
 LARGE = 15000
 TAX_COD_BPS, TAX_TRANSFER_BPS = 1600, 500
+TRANSFER_DETAILS = "Meezan Bank — Test Kitchen — PK00MEZN0000000000000001"
 DELIVERY_FEE, DELIVERY_MIN = 15000, 80000
 
 _ids = itertools.count(1)
@@ -155,6 +156,7 @@ def restaurant_shop(pg: PgDatabase) -> Shop:
         tax_transfer_bps=TAX_TRANSFER_BPS,
         delivery_fee_paisa=DELIVERY_FEE,
         delivery_min_order_paisa=DELIVERY_MIN,
+        transfer_account_details=TRANSFER_DETAILS,
     )
     return shop
 
@@ -192,7 +194,9 @@ class Customer:
     phone: str = field(default_factory=lambda: f"+92300{next(_ids) + 5_000_000:07d}")
     seen: set[uuid.UUID] = field(default_factory=set)
 
-    async def deliver(self, text: str | None, kind: MessageKind = "text") -> None:
+    async def deliver(
+        self, text: str | None, kind: MessageKind = "text", media: InboundMedia | None = None
+    ) -> None:
         key = f"msg-{uuid.uuid4().hex}"
         event = InboundMessage(
             session_ref=self.shop.session_ref,
@@ -203,6 +207,7 @@ class Customer:
             kind=kind,
             text=text,
             received_at=self.env.clock.now(),
+            media=media,
         )
         headers, body = self.env.fake.signed_webhook(self.shop.session_ref, [event])
         parsed = self.env.fake.parse_webhook(self.shop.session_ref, headers, body)
@@ -215,9 +220,11 @@ class Customer:
             {"message": self.engine.handle, "delivery_status": apply_delivery_status},
         )
 
-    async def send(self, text: str | None, kind: MessageKind = "text") -> list[str]:
+    async def send(
+        self, text: str | None, kind: MessageKind = "text", media: InboundMedia | None = None
+    ) -> list[str]:
         """Send one message, let a worker process it, and return the replies it queued."""
-        await self.deliver(text, kind)
+        await self.deliver(text, kind, media)
         await self.processor().run_once(self.shop.tenant)
         self.env.clock.advance(timedelta(seconds=5))
         return self.new_replies()

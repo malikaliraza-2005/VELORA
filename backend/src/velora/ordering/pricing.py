@@ -93,6 +93,9 @@ def price_cart(
         raise QuoteRejected("payment_unavailable", "cash on delivery isn't available")
     if payment_method == "transfer" and not settings.transfer_enabled:
         raise QuoteRejected("payment_unavailable", "bank or wallet transfer isn't available")
+    if payment_method == "transfer" and settings.transfer_account_details is None:
+        # P8-T3: the customer must be told where to pay.
+        raise QuoteRejected("payment_unavailable", "bank or wallet transfer isn't set up yet")
 
     quoted = quote_lines(live, lines)
     subtotal = sum(q.line_total_paisa for q in quoted)
@@ -201,9 +204,12 @@ def check_pickup_time(settings: OrderingSettings, now: datetime, pickup_at: date
         )
 
 
-def cod_allowed(settings: OrderingSettings, total_paisa: int, *, first_order: bool) -> bool:
-    """AD-03: a customer's first COD order may not exceed the tenant's limit."""
-    if not settings.cod_enabled:
+def cod_allowed(
+    settings: OrderingSettings, total_paisa: int, *, first_order: bool, blocked: bool = False
+) -> bool:
+    """AD-03, P8-T2: a blocklisted customer can't pay cash on delivery, and a customer's first
+    order (no completed order yet, AD-32) may not exceed the tenant's limit."""
+    if not settings.cod_enabled or blocked:
         return False
     limit = settings.cod_first_order_limit_paisa
     return not (first_order and limit is not None and total_paisa > limit)

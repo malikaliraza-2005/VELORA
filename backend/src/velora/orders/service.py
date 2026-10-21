@@ -4,8 +4,8 @@
   the kitchen can accept and progress orders).
 - A move names the status the staff member saw (`expected`). If the order has moved since,
   it is refused (409), so a double tap or two devices can't apply a move twice (AD-20).
-- `paid_staff_verified` can't be set here: P8's verification needs the transaction reference
-  and the PIN.
+- Payment moves can't be made here (`lifecycle.PAYMENT_MOVES`): they need the transaction
+  reference and a PIN, through `velora.payments`.
 """
 
 from __future__ import annotations
@@ -120,7 +120,7 @@ def _view(row: tuple[Any, ...], lines: list[OrderLine], history: list[OrderMove]
         for s in lifecycle.next_statuses(
             status, "staff", payment_method=payment, fulfilment=fulfilment
         )
-        if s not in lifecycle.STAFF_ACTION_EXCLUDED
+        if (status, s) not in lifecycle.PAYMENT_MOVES
     ]
     return OrderView(
         id=oid,
@@ -198,8 +198,8 @@ class OrderService:
         reason: str | None = None,
     ) -> OrderView:
         _require(actor, Permission.ORDERS_UPDATE)
-        if to in lifecycle.STAFF_ACTION_EXCLUDED:
-            raise ForbiddenError("payments are verified with the reference and PIN (P8)")
+        if (expected, to) in lifecycle.PAYMENT_MOVES or to == "paid_staff_verified":
+            raise ForbiddenError("payments are verified with the reference and a PIN")
         async with self._db.tenant(actor.tenant) as conn:
             try:
                 await lifecycle.transition(

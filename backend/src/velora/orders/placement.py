@@ -21,6 +21,10 @@ customer gets a clear message:
 Two YES replies can't create two orders: the conversation lock serialises them, the nonce
 update lets only one through, and `orders.pending_action_id` is unique.
 
+**Cash on delivery (P8-T2, AD-32).** A blocklisted customer can't pay cash, and a customer
+with no completed order yet is on their first order, whose total the restaurant may limit.
+Both are checked when the payment method is offered and again here, at YES.
+
 **Possible duplicates (P7-T5).** An order with the same customer and cart hash as one placed
 in the last 10 minutes is flagged `possible_duplicate` for staff. It is never cancelled
 automatically.
@@ -268,6 +272,24 @@ async def claimable(
 # The order transaction (P7-T2) -----------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class CodStanding:
+    # No completed order yet: earlier cancelled, rejected or expired orders don't count.
+    first_order: bool
+    blocked: bool
+
+
+async def cod_standing(conn: AsyncConnection[Any], customer_id: uuid.UUID) -> CodStanding:
+    cur = await conn.execute(
+        "SELECT cu.cod_blocked_at IS NOT NULL, NOT EXISTS (SELECT 1 FROM velora.orders o "
+        "WHERE o.customer_id = cu.id AND o.status = 'completed') "
+        "FROM velora.customers cu WHERE cu.id = %s",
+        (customer_id,),
+    )
+    blocked, first_order = expect_row(await cur.fetchone())
+    return CodStanding(first_order=first_order, blocked=blocked)
+
+
 async def revalidate(
     conn: AsyncConnection[Any], tenant: TenantId, now: datetime
 ) -> OrderingSettings:
@@ -283,7 +305,7 @@ async def reprice(
     settings: OrderingSettings,
     pending: PendingConfirmation,
     *,
-    first_order: bool,
+    standing: CodStanding,
     now: datetime,
 ) -> Quote:
     """Step 3: price the confirmed checkout again and compare with the summary."""
@@ -311,8 +333,10 @@ async def reprice(
         at = checkout.pickup_at
         if at is None or not (earliest <= at <= latest) or at <= now:
             raise OrderRefused("pickup_time", "that pickup time has passed")
+    if checkout.payment_method == "cod" and standing.blocked:
+        raise OrderRefused("cod_blocked", copy.COD_BLOCKED)
     if checkout.payment_method == "cod" and not cod_allowed(
-        settings, quote.total_paisa, first_order=first_order
+        settings, quote.total_paisa, first_order=standing.first_order
     ):
         raise OrderRefused("cod_limit", "cash on delivery isn't available for this order")
     return quote
@@ -433,8 +457,11 @@ async def announce(
     pending: PendingConfirmation,
     placed: Placed,
     now: datetime,
+    *,
+    transfer_details: str | None,
 ) -> None:
-    """Step 6: the confirmation (A7), queued with the order. Its delivery changes nothing."""
+    """Step 6: the confirmation (A7), queued with the order. Its delivery changes nothing. A
+    transfer order's confirmation carries the account details (P8-T3)."""
     await notify.send_to_customer(
         conn,
         tenant,
@@ -444,6 +471,7 @@ async def announce(
             total_paisa=placed.total_paisa,
             payment_method=pending.checkout.payment_method,
             payment_due_at=placed.payment_due_at,
+            transfer_details=transfer_details,
         ),
         key=f"order-placed:{placed.order_id}",
         now=now,
@@ -472,12 +500,11 @@ async def place_order(
         now=now,
     )
     settings = await revalidate(conn, tenant, now)
-    cur = await conn.execute(
-        "SELECT 1 FROM velora.orders WHERE customer_id = %s LIMIT 1", (customer_id,)
-    )
-    first_order = await cur.fetchone() is None
-    quote = await reprice(conn, settings, pending, first_order=first_order, now=now)
+    standing = await cod_standing(conn, customer_id)
+    quote = await reprice(conn, settings, pending, standing=standing, now=now)
     await consume(conn, pending, now)
     placed = await create(conn, tenant, settings, pending, quote, now)
-    await announce(conn, tenant, pending, placed, now)
+    await announce(
+        conn, tenant, pending, placed, now, transfer_details=settings.transfer_account_details
+    )
     return placed

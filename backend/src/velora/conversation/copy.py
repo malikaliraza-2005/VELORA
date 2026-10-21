@@ -44,6 +44,7 @@ PAYMENT_CLAIM = (
     "Thanks! Staff will confirm once the payment shows in the restaurant's account. "
     "A screenshot alone does not confirm payment."
 )
+COD_BLOCKED = "cash on delivery isn't available for this number"
 NO_ORDERS = "You don't have any orders with us yet. Reply MENU to start one."
 FULFILMENT_ASK = "Delivery or takeaway?"
 ADDRESS_ASK = "Please share your location 📍 (Attach → Location) or type your full address."
@@ -93,16 +94,18 @@ def order_placed(
     total_paisa: int,
     payment_method: str,
     payment_due_at: datetime | None,
+    transfer_details: str | None = None,
 ) -> str:
-    """A7: the confirmation, from the order as stored."""
+    """A7: the confirmation, from the order as stored. A transfer order carries the
+    restaurant's account details (P8-T3)."""
     lines = [
         f"✅ Order #{reference} placed.",
         f"Total: {format_rupees(total_paisa)} ({PAYMENT_LABELS[payment_method]}).",
     ]
     if payment_method == "transfer" and payment_due_at is not None:
         lines += [
-            f"Please pay by {format_time(payment_due_at)}. "
-            "The restaurant's account details will follow here.",
+            f"Please pay by {format_time(payment_due_at)} to the restaurant's own account:",
+            transfer_details or "(staff will send the account details here)",
             f'Put "{reference}" in the payment reference if possible. Staff will confirm once '
             "they see the payment in the restaurant's account. "
             "A screenshot alone does not confirm payment.",
@@ -111,6 +114,32 @@ def order_placed(
         lines.append("The restaurant will confirm it here shortly.")
     lines.append('Reply "status" anytime, or CANCEL to cancel before the restaurant accepts it.')
     return "\n".join(lines)
+
+
+def transfer_reminder(
+    reference: str, total_paisa: int, payment_due_at: datetime, transfer_details: str | None
+) -> str:
+    """Order "status" while a transfer is awaited: where and by when to pay."""
+    return (
+        f"Please pay {format_rupees(total_paisa)} for order #{reference} by "
+        f"{format_time(payment_due_at)} to:\n"
+        f"{transfer_details or '(reply 0 and staff will send the account details)'}"
+    )
+
+
+def evidence_received(reference: str, *, expired: bool) -> str:
+    """A screenshot, a document or "I have paid" for a transfer order (P8-T3). It is kept
+    for staff and changes nothing about the order."""
+    if expired:
+        return (
+            f"Thanks — order #{reference} had already expired, so staff will check your payment "
+            "and get back to you here. A screenshot alone does not confirm payment."
+        )
+    return (
+        f"Thanks — we've passed this to staff for order #{reference}. They will confirm once "
+        "the payment shows in the restaurant's account. A screenshot alone does not confirm "
+        "payment."
+    )
 
 
 def open_order_kept(reference: str) -> str:
@@ -142,6 +171,11 @@ def order_update(
     return {
         "paid_staff_verified": (
             f"💳 Payment received for order #{reference} — verified by restaurant staff. Thank you!"
+        ),
+        # Only after the owner withdraws a verification (P8-T6).
+        "awaiting_transfer": (
+            f"Sorry — {restaurant} couldn't match your payment for order #{reference} yet. "
+            "Staff will check and get back to you; reply 0 if you have questions."
         ),
         "accepted": f"👨‍🍳 Order #{reference} accepted — being prepared.",
         "out_for_delivery": f"🛵 Order #{reference} is out for delivery.",

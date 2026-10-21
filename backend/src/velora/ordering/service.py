@@ -75,7 +75,7 @@ class OrderingService:
                 return current
             assignments = ", ".join(f"{name} = %({name})s" for name in changed)
             await conn.execute(
-                f"UPDATE velora.ordering_settings SET {assignments}, "  # noqa: S608 - names from BOUNDS/FLAGS
+                f"UPDATE velora.ordering_settings SET {assignments}, "  # noqa: S608 - names from BOUNDS/FLAGS/TEXTS
                 "updated_at = %(now)s",
                 {**{k: after[k] for k in changed}, "now": now},
             )

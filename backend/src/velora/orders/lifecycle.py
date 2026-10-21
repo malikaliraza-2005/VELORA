@@ -15,8 +15,12 @@ in the database, and a test checks that the two agree.
 
 `draft` and `awaiting_confirmation` exist in the schema but no move uses them: on WhatsApp the
 templated summary and its YES nonce are the confirmation step, and an order is created already
-confirmed (`cod_confirmed` or `awaiting_transfer`). `paid_staff_verified` is set only by the
-P8 payment verification (transaction reference and PIN), never by the generic staff action.
+confirmed (`cod_confirmed` or `awaiting_transfer`).
+
+**Payment moves (P8, AD-32)** are made only by `velora.payments`, never by the generic staff
+action: verifying a transfer (reference and PIN), the late-payment review of an expired order
+(accept or refund) and the owner's reversal. The database also refuses `paid_staff_verified`
+unless the payments ledger holds a verified, unreversed entry for the order (migration 0010).
 """
 
 from __future__ import annotations
@@ -78,6 +82,7 @@ TRANSITIONS: tuple[Rule, ...] = (
     Rule("awaiting_transfer", "cancelled", CUSTOMER_OR_STAFF),
     Rule("paid_staff_verified", "accepted", STAFF),
     Rule("paid_staff_verified", "refund_pending", STAFF),
+    Rule("paid_staff_verified", "awaiting_transfer", STAFF, payment_method="transfer"),
     Rule("accepted", "preparing", STAFF),
     Rule("accepted", "cancelled", STAFF, payment_method="cod"),
     Rule("accepted", "refund_pending", STAFF, payment_method="transfer"),
@@ -88,6 +93,8 @@ TRANSITIONS: tuple[Rule, ...] = (
     Rule("out_for_delivery", "completed", STAFF),
     Rule("ready", "completed", STAFF),
     Rule("refund_pending", "cancelled", STAFF),
+    Rule("expired", "paid_staff_verified", STAFF, payment_method="transfer"),
+    Rule("expired", "refund_pending", STAFF, payment_method="transfer"),
 )
 
 # How an order starts: the customer's YES, by payment method (P7-T2).
@@ -97,8 +104,15 @@ INITIAL_STATUS: dict[PaymentMethod, Status] = {
 }
 # Staff must say why they refuse or cancel an order; the customer is told the reason.
 REASON_REQUIRED: frozenset[Status] = frozenset({"rejected", "cancelled", "refund_pending"})
-# Moves the generic staff action can't make (P8 sets it, with a reference and PIN).
-STAFF_ACTION_EXCLUDED: frozenset[Status] = frozenset({"paid_staff_verified"})
+# Moves only the payment service makes (P8): verification, late review and reversal.
+PAYMENT_MOVES: frozenset[tuple[Status, Status]] = frozenset(
+    {
+        ("awaiting_transfer", "paid_staff_verified"),
+        ("expired", "paid_staff_verified"),
+        ("expired", "refund_pending"),
+        ("paid_staff_verified", "awaiting_transfer"),
+    }
+)
 # Before the kitchen starts. Ending an order here gives its capacity place back.
 BEFORE_KITCHEN: frozenset[Status] = frozenset(
     {"cod_confirmed", "awaiting_transfer", "paid_staff_verified", "accepted"}

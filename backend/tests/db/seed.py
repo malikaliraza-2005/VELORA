@@ -139,8 +139,15 @@ def seed_tenant(conn: psycopg.Connection[Any], slug: str, prefix: str) -> dict[s
         )
         ids["payments"] = _one(
             conn,
-            "INSERT INTO velora.payments (tenant_id, order_id, method, amount_paisa) "
-            "VALUES (%s, %s, 'cod', 105000) RETURNING id",
+            "INSERT INTO velora.payments (tenant_id, order_id, method, amount_paisa, status, "
+            "verified_by_staff_id, verified_at) VALUES (%s, %s, 'cod', 105000, 'verified', %s, "
+            "now()) RETURNING id",
+            (t, order, staff),
+        )
+        ids["payment_evidence"] = _one(
+            conn,
+            "INSERT INTO velora.payment_evidence (tenant_id, order_id, kind, inbox_event_id, "
+            "received_at) VALUES (%s, %s, 'text_claim', gen_random_uuid(), now()) RETURNING id",
             (t, order),
         )
         ids["audit_log"] = _one(

@@ -103,6 +103,44 @@ def _move_order(w: World) -> tuple[Device, httpx2.Response]:
     )
 
 
+def _transfer_order(w: World, status: str = "awaiting_transfer") -> Any:
+    """P8: a transfer order, and the owner's payment PIN."""
+    assert w.owner.request("PUT", "/api/me/pin", json={"new_pin": "480135"}).status_code < 300
+    with w.db.admin() as conn:
+        return insert_order(conn, w.tenant.value, status=status, payment_method="transfer")
+
+
+def _verify(w: World) -> tuple[Device, httpx2.Response]:
+    order = _transfer_order(w)
+    return w.owner, w.owner.request(
+        "POST", f"/api/orders/{order}/payment/verify", json={"reference": "AUD1", "pin": "480135"}
+    )
+
+
+def _late_review(w: World) -> tuple[Device, httpx2.Response]:
+    order = _transfer_order(w, "expired")
+    body = {"reference": "AUD2", "pin": "480135", "decision": "accept"}
+    return w.owner, w.owner.request("POST", f"/api/orders/{order}/payment/late-review", json=body)
+
+
+def _reverse(w: World) -> tuple[Device, httpx2.Response]:
+    _, verified = _verify(w)
+    (payment,) = verified.json()["ledger"]
+    body = {"pin": "480135", "reason": "not received"}
+    return w.owner, w.owner.request("POST", f"/api/payments/{payment['id']}/reverse", json=body)
+
+
+def _cod_block(w: World, *, unblock: bool) -> tuple[Device, httpx2.Response]:
+    with w.db.admin() as conn:
+        order = insert_order(conn, w.tenant.value)
+    customer = w.owner.request("GET", f"/api/orders/{order}/payment").json()["customer_id"]
+    path = f"/api/customers/{customer}/cod-block"
+    if not unblock:
+        return w.owner, w.owner.request("PUT", path, json={"reason": "fake order"})
+    w.owner.request("PUT", path, json={"reason": "fake order"})
+    return w.owner, w.owner.request("DELETE", path)
+
+
 CASES: dict[tuple[str, str], tuple[str, Case]] = {
     ("POST", "/api/auth/login"): ("auth.login", _login),
     ("POST", "/api/auth/logout"): (
@@ -185,6 +223,18 @@ CASES: dict[tuple[str, str], tuple[str, Case]] = {
     ),
     # P7: order lifecycle.
     ("POST", "/api/orders/{order_id}/status"): ("order.status_changed", _move_order),
+    # P8: payments.
+    ("POST", "/api/orders/{order_id}/payment/verify"): ("payment.verified", _verify),
+    ("POST", "/api/orders/{order_id}/payment/late-review"): ("payment.verified", _late_review),
+    ("POST", "/api/payments/{payment_id}/reverse"): ("payment.reversed", _reverse),
+    ("PUT", "/api/customers/{customer_id}/cod-block"): (
+        "customer.cod_blocked",
+        lambda w: _cod_block(w, unblock=False),
+    ),
+    ("DELETE", "/api/customers/{customer_id}/cod-block"): (
+        "customer.cod_unblocked",
+        lambda w: _cod_block(w, unblock=True),
+    ),
 }
 
 
