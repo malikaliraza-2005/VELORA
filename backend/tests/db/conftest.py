@@ -34,6 +34,7 @@ from velora.db.migrate import migrate_up, setup_roles
 APP_ROLE = "app_rw"
 OWNER_ROLE = "velora_owner"
 PLATFORM_ROLE = "velora_platform"
+DISPATCHER_ROLE = "velora_dispatcher"
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,9 @@ class PgDatabase:
     def platform(self) -> psycopg.Connection[Any]:
         return psycopg.connect(self.cluster.url(self.name, PLATFORM_ROLE))
 
+    def dispatcher(self) -> psycopg.Connection[Any]:
+        return psycopg.connect(self.cluster.url(self.name, DISPATCHER_ROLE))
+
 
 @pytest.fixture(scope="session")
 def cluster() -> Cluster:
@@ -113,7 +117,10 @@ def _prepare_cluster(admin_url: str) -> Cluster:
     """Once per test process, even when another conftest re-exports these fixtures: the role
     passwords are cluster-wide, so setting them twice would break the first Cluster."""
     setup_roles(admin_url)
-    passwords = {role: secrets.token_urlsafe(24) for role in (OWNER_ROLE, APP_ROLE, PLATFORM_ROLE)}
+    passwords = {
+        role: secrets.token_urlsafe(24)
+        for role in (OWNER_ROLE, APP_ROLE, PLATFORM_ROLE, DISPATCHER_ROLE)
+    }
     with psycopg.connect(admin_url, autocommit=True) as conn:
         for role, password in passwords.items():
             conn.execute(

@@ -285,7 +285,7 @@ Stop or pause the pilot on any of these:
   - Customers are soft-deleted and anonymised.
   - History tables are append-only for the runtime role.
 - **Findings for later phases:**
-  - **P5:** under FORCE RLS, a worker can't claim queue jobs across tenants with `SKIP LOCKED`. This needs a design that keeps the resolver as the only SECURITY DEFINER function.
+  - **P5:** under FORCE RLS, a worker can't claim queue jobs across tenants with `SKIP LOCKED`. This needs a design that keeps the resolver as the only SECURITY DEFINER function. *Resolved by AD-29 (the `velora_dispatcher` role).*
   - **P11:** `pg_dump` needs a role that bypasses RLS, and database-level grants are not in a plain `pg_dump`.
 - **Evidence:** PR #3. CI runs 39590467933 (PR) and 39590889951 (`main` after the merge).
 
@@ -371,6 +371,45 @@ Stop or pause the pilot on any of these:
 - **Settings row:** one per tenant, created with database defaults on first use. Defaults: delivery and takeaway on, fee 0, pickup 20–240 minutes, COD and transfer on, transfer window 30 minutes, no COD limit, no capacity cap, tax not set. Per-merchant values are set with each merchant (PENDING EXTERNAL).
 - **Not gated:** going live doesn't require a published menu. The ordering gate refuses carts without one.
 - **Evidence:** PR #5. CI run 39598901486 (491 tests).
+
+### AD-29: P5 implementation choices (provider-neutral messaging core)
+- **Scope:** only the provider-neutral track that AD-25 allows. The OpenWA adapter, its webhook endpoint, OpenWA-based detection and the reconciliation job (P5-T2, the OpenWA parts of T3 and T5, and T6) are **not built**. They stay blocked until the Go (V-01).
+- **Cross-tenant work discovery (resolves the AD-26 P5 finding):**
+  - A new login role, `velora_dispatcher`, is NOBYPASSRLS, NOINHERIT and owns nothing.
+  - Through column grants and SELECT-only `dispatch_lookup` policies, it can read only `tenant_id` and the queue-timing columns of `inbox_events`, `outbox_messages` and `channels`. It can't read payloads, session references or any other table, and it can't write.
+  - It answers one question: which tenants have work due? The worker then does the work as `app_rw` inside that tenant's RLS scope.
+  - No SECURITY DEFINER function was added. The resolver is still the only one.
+  - *Trade-off:* one more database login to manage (`VELORA_DISPATCHER_DATABASE_URL`).
+- **Provider interface:** `WhatsAppProvider` (an abstract class) has `send_text`, `send_media`, `get_session_status`, `start_session`, `get_qr`, `logout`, `capabilities` and `parse_webhook`.
+  - `parse_webhook` verifies the raw body and maps it to the canonical events `InboundMessage`, `DeliveryStatus` and `SessionState`.
+  - The adapter computes each event's dedup key, which keeps V-05 open: a later decision changes only the adapter.
+  - `capabilities().idempotent_send` says whether a send whose outcome is unknown may be retried with the same key (V-06, PC-6).
+- **Inbox:**
+  - Ingress stores verified events and returns only after the commit. The endpoint will acknowledge only then.
+  - Group, status and broadcast messages are dropped before any write.
+  - Processing is leased (2 minutes) with a claim token. The handler's writes and "done" commit in one transaction, guarded by the token, so a worker that lost its lease can't commit.
+  - Events from one customer on one channel are processed one at a time, in arrival order (AD-20).
+  - Backoff is 10 s, 30 s, 2 m, 5 m and 15 m, then `failed`.
+  - Only event types with a handler are claimed. Until P6, inbound customer messages stay stored and pending.
+- **Outbox:**
+  - New states are `waiting_for_channel`, `delivered`, `read` and `unknown`.
+  - Messages to one recipient on one channel go out in order. A later message never overtakes one waiting to retry.
+  - Conversational replies go stale 30 minutes after they are queued. Each affected recipient gets one placeholder "we're back" message, whose wording is for P6. Status updates never go stale.
+  - After a timeout, or a lease that ended mid-send, a message is retried only if it is not critical **and** the provider guarantees idempotent sends. Otherwise it becomes `unknown` and is never re-sent automatically.
+  - The rate cap defaults to 20 sends per channel per minute. It is a safety limit only, with no pacing or warm-up behaviour (AD-24; PC-5 is still the owner's decision).
+- **Channel states:** pending, connected, reconnecting, needs_qr, logged_out, failed, suspected_restricted and retired.
+  - The old P2 values were mapped: connecting and disconnected became reconnecting, paused became failed, and banned became suspected_restricted.
+  - The last observation wins, but a report older than the current state is ignored and a retired channel never changes.
+  - An unreachable provider counts as `failed`.
+  - *Trade-off:* `suspected_restricted` isn't sticky. If the provider later reports `connected`, orders reopen without a human review. Making it sticky would need an operator action to clear it.
+- **Circuit breaker:** the ordering gate needs at least one `connected` channel, and reads it with no cache. The health poll runs every 60 seconds. Session events and send errors trip the breaker immediately.
+- **Global pause:** an append-only global table, `global_pause_events`, where the newest row wins. Only the founder's tool can write it (`global-pause --reason`, `global-resume`), and the runtime can only read it. It is the first check in the ordering gate.
+- **Log redaction:**
+  - The redacting formatter scrubs secret key/value pairs, bearer tokens, URL passwords, magic-link fragments and registered secrets.
+  - It also masks phone numbers and WhatsApp ids down to their last three digits.
+  - Error text stored in the queues is redacted and capped at 200 characters.
+- **Provider boundary:** a static import-graph check in CI. Only `velora.messaging.registry` and `velora.workers.__main__` may reach `velora.messaging.providers`. `fake` is registered only in development and test, and `meta_cloud` is never registered.
+- **Evidence:** PR #6. CI run 39604566511 (580 tests).
 
 ---
 
@@ -518,7 +557,7 @@ A few GB of dumps is probably **$0** on R2 or B2, depending on how long dumps ar
 
 ## 8. Items for owner review
 
-1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-28).** They stand unless you reverse them.
+1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-29).** They stand unless you reverse them.
 2. **The optional customer order-tracking link (§5).** Not approved.
 3. **The validation-dependent decisions V-01 to V-10.** These come back to you with the trial evidence.
 4. **The cost commitment.** Approve only after vendor checks and V-03.

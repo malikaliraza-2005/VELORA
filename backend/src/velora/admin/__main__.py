@@ -14,6 +14,9 @@ recovery-link        --tenant --staff-id       prints a 15-minute login link (re
 go-live              --tenant
 menu-import          --tenant --file CSV       loads the CSV into the draft menu; the owner
                                                reviews and publishes it on the dashboard
+global-pause         --reason                  stop new orders for every tenant (P5)
+global-resume                                  take new orders again
+global-status                                  show whether the global pause is on
 """
 
 from __future__ import annotations
@@ -91,6 +94,11 @@ def _parser() -> argparse.ArgumentParser:
     menu = commands.add_parser("menu-import")
     menu.add_argument("--tenant", required=True)
     menu.add_argument("--file", required=True, type=Path)
+
+    pause = commands.add_parser("global-pause")
+    pause.add_argument("--reason", required=True)
+    commands.add_parser("global-resume")
+    commands.add_parser("global-status")
     return parser
 
 
@@ -115,6 +123,18 @@ def run(args: argparse.Namespace, ops: Onboarding, settings: Settings) -> None:
     if args.command == "tenant-create":
         tenant = ops.create_tenant(slug=args.slug, display_name=args.name, order_prefix=args.prefix)
         print(f"created tenant {args.slug}: {tenant.value}")
+    elif args.command == "global-pause":
+        ops.set_global_pause(paused=True, reason=args.reason)
+        print("global pause ON: no tenant takes new orders until global-resume")
+    elif args.command == "global-resume":
+        ops.set_global_pause(paused=False)
+        print("global pause OFF")
+    elif args.command == "global-status":
+        paused, reason, since = ops.global_pause_status()
+        line = f"global pause {'ON' if paused else 'OFF'}"
+        if since is not None:
+            line += f" since {since.isoformat(timespec='seconds')}"
+        print(f"{line}: {reason}" if reason else line)
     elif args.command == "tenants":
         for t in ops.list_tenants():
             needs = ", ".join(t.gaps) or "nothing"

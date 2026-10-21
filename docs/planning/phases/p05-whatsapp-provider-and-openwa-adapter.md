@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Authorisation** | **NOT AUTHORISED.** Once authorised, the **provider-neutral tasks** (T1, the core of T3/T4/T5, T7, T8) may proceed before the Go under [AD-25](../../architecture/architecture-decisions.md#ad-25-provider-neutral-build-track-while-the-openwa-test-waits). The **OpenWA-specific tasks** (T2, the OpenWA parts of T3 and T5, and T6) stay **BLOCKED** until the gates below are met. |
+| **Authorisation** | **Authorised by the owner on 2026-10-21 ("Start P5").** The choices made are recorded in AD-29. The **provider-neutral tasks** (T1, the core of T3/T4/T5, T7, T8) were built before the Go under [AD-25](../../architecture/architecture-decisions.md#ad-25-provider-neutral-build-track-while-the-openwa-test-waits). The **OpenWA-specific tasks** (T2, the OpenWA parts of T3 and T5, and T6) stay **BLOCKED** until the gates below are met. |
 | **Hard gates** | **the P0 Go (V-01)**. The engine (V-02) and recovery design (V-04) must already be decided, along with V-05, V-06, V-07 and V-08 for the tasks that use them. |
 | **Depends on** | P0 Go, P2 |
 | **Blocks** | P6, P10, P11 (recovery mode) |

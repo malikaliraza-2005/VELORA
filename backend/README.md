@@ -2,9 +2,8 @@
 
 Python 3.12 + FastAPI service: webhook ingress and background workers (decision AD-15).
 
-P1 added the skeleton: an app factory with a health endpoint, settings loaded from
-environment variables, and an empty `workers` package. Product features arrive in later
-phases — see [`../docs/planning/implementation-plan.md`](../docs/planning/implementation-plan.md).
+P1 added the skeleton: an app factory with a health endpoint and settings loaded from
+environment variables. Product features arrive phase by phase — see [`../docs/planning/implementation-plan.md`](../docs/planning/implementation-plan.md).
 
 ## Local development
 
@@ -27,6 +26,7 @@ uv run pytest                # tests
 - `migrations/`: plain SQL, `NNNN_name.up.sql` + `.down.sql`. Every tenant table gets FORCE RLS and the shared `tenant_isolation` policy via `velora.enable_tenant_rls()`.
 - `access.py`: `Database.tenant(TenantId)`, the only way the runtime runs queries. It refuses to start without a `TenantId` and scopes one transaction to that tenant.
 - `velora_platform` (P3) is the founder's onboarding role: NOBYPASSRLS, owns nothing, scoped to one tenant at a time. Its only cross-tenant right is listing tenants.
+- `velora_dispatcher` (P5) is the workers' discovery role: NOBYPASSRLS, owns nothing. It can read only tenant ids and queue-timing columns, so it can tell which tenants have work due, but never what the work is.
 
 ```bash
 python -m velora.db setup-roles      # VELORA_ADMIN_DATABASE_URL (administrator)
@@ -69,6 +69,8 @@ python -m velora.admin owner-invite --tenant karachi-grill --name "<owner name>"
 python -m velora.admin menu-import --tenant karachi-grill --file menu.csv   # draft only; the owner publishes
 python -m velora.admin go-live --tenant karachi-grill   # refused until both records exist
 python -m velora.admin tenants                          # status, and what each tenant still needs
+python -m velora.admin global-pause --reason "<why>"   # stop new orders for EVERY tenant (P5)
+python -m velora.admin global-resume                   # take orders again
 ```
 
 - **Corrections:** a verification or consent record can't be edited. To correct one, record a new one with `--supersedes <id>`.
@@ -97,3 +99,20 @@ item,Drinks,COKE,Coca-Cola 345ml,120,,,,
 ```
 
 Prices are in rupees (`650` or `650.50`). An option's price is its extra charge. Put the item row before its options. `min` and `max` (how many options a customer picks from the group) go on the group's first row. Every problem in the file is reported with its line number, and nothing is saved until the file is clean.
+
+## Messaging core (P5, provider-neutral)
+
+Built against the simulated `FakeProvider` under AD-25. **The OpenWA adapter, its webhook
+endpoint and inbound reconciliation are not built**: they wait for the live validation Go (V-01).
+
+- `src/velora/messaging/provider.py`: the `WhatsAppProvider` interface and the canonical events (`InboundMessage`, `DeliveryStatus`, `SessionState`). Business code depends on this only.
+- `src/velora/messaging/providers/`: adapters (`fake`, and the interface-only `meta_cloud`). Only `messaging/registry.py` and `workers/__main__.py` may import them; `tests/test_provider_boundary.py` enforces it.
+- `inbox.py`: ingress stores verified events and returns only after the commit (group, status and broadcast messages are dropped). Processing is leased, so a crashed worker's event is processed exactly once.
+- `outbox.py`: `enqueue` inside your transaction, with an idempotency key. The sender holds messages while the channel is down and flushes them in order, replaces stale replies with one "we're back" message, backs off 10 s to 15 m, and never re-sends a critical message whose outcome is unknown.
+- `channels.py`: the channel state machine, the 60-second health poll, the circuit breaker (no new orders without a `connected` channel) and the global pause.
+- `dispatch.py` and `workers/`: cross-tenant work discovery as `velora_dispatcher`, then the work as `app_rw`, tenant by tenant.
+- `velora/redaction.py`: the log formatter that scrubs secrets and phone numbers.
+
+```bash
+python -m velora.workers   # VELORA_DATABASE_URL (app_rw) + VELORA_DISPATCHER_DATABASE_URL
+```

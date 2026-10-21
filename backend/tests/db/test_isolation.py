@@ -52,13 +52,22 @@ TENANT_TABLES: dict[str, str] = {
 }
 
 # Tables in the velora schema that are deliberately global (no tenant). Each needs a reason.
-GLOBAL_TABLES: dict[str, str] = {}
+GLOBAL_TABLES: dict[str, str] = {
+    # P5: one switch that stops new orders for every tenant (AD-19). Append-only; the runtime
+    # can only read it, and only the founder's tool appends to it.
+    "global_pause_events": "platform-wide pause switch",
+}
 
 # Policies other than tenant_isolation: (table, policy) -> (roles, command).
 EXTRA_POLICIES: dict[tuple[str, str], tuple[list[str], str]] = {
     # Bootstrap resolver lookup (P2-T4); the role is NOLOGIN and reachable only through the
     # SECURITY DEFINER resolver function.
     ("channels", "resolver_lookup"): (["velora_resolver"], "SELECT"),
+    # Worker work discovery (P5): tenant ids and queue-timing columns only (column grants,
+    # checked in tests/messaging/test_dispatch.py).
+    ("channels", "dispatch_lookup"): (["velora_dispatcher"], "SELECT"),
+    ("inbox_events", "dispatch_lookup"): (["velora_dispatcher"], "SELECT"),
+    ("outbox_messages", "dispatch_lookup"): (["velora_dispatcher"], "SELECT"),
     # Founder onboarding tools (P3): the platform role may list tenants, and otherwise works
     # one tenant at a time under the shared tenant expression (checked below).
     ("tenants", "platform_directory"): (["velora_platform"], "SELECT"),
@@ -91,6 +100,7 @@ APPEND_ONLY = {
     "audit_log",
     "channel_events",
     "menu_publications",
+    "global_pause_events",
 }
 
 # Saved as a whole (delete and re-insert), never updated in place: the menu draft content.
