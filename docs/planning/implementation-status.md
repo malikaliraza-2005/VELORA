@@ -86,12 +86,12 @@ A task only counts as done when its evidence exists.
 | P1-T1 Repository and layout | Done locally | `git init` with `origin` set to GitHub (**not pushed**). `backend/`, `web/`, `infra/`, `docs/`, README. `.gitignore` checks in `backend/tests/test_repo_hygiene.py` pass locally |
 | P1-T2 Toolchain | Done locally | Python 3.12, uv lockfile (`backend/uv.lock`) committed. Locally: `ruff format --check` clean, `ruff check` clean, `mypy --strict` clean, `pytest` 17 passed |
 | P1-T3 Configuration | Done locally | `.env.example` with placeholders only. The placeholder test passes |
-| P1-T4 Secret scanning | **Configured, not verified** | `.pre-commit-config.yaml` (gitleaks v8.30.1) and a CI `secret-scan` job. The local hook couldn't be installed because **Windows Application Control blocked the `pre-commit` launcher**. The fake-key test commit was therefore **not blocked locally**. That test was done in a throwaway repo, since deleted. **Acceptance ("blocks a fake-key commit") is unverified.** |
-| P1-T5 CI and branch protection guidance | **Partly verified** | First push (main @ `3e3b14b`, [CI run 39586964758](https://github.com/malikaliraza-2005/VELORA/actions/runs/39586964758)). The **`Backend checks` job passed on GitHub**: install, format, lint, type check, tests. The **`Secret scan` job failed** with gitleaks-action "Unexpected exit code [1]". This most likely comes from the scan range on the first commit, which has no parent. That's an assumption: the full log needs a GitHub login. Fix on branch `fix/ci-secret-scan`, which scans the full history with a pinned gitleaks image. **Awaiting a CI run on that branch.** |
+| P1-T4 Secret scanning | **CI scan verified; fake-key detection pending** | `.pre-commit-config.yaml` (gitleaks v8.30.1). The local hook is blocked on the founder's machine by Windows Application Control. CI scans the **full history** with a pinned gitleaks image, and it passed on `main` (run 39587396126: no leaks). A CI **self-test** now checks that a fake-key commit is flagged (branch `fix/ci-secret-scan-selftest`). Its result will be recorded here. |
+| P1-T5 CI and branch protection guidance | **Verified** | On merged `main`, [CI run 39587396126](https://github.com/malikaliraza-2005/VELORA/actions/runs/39587396126): `Backend checks` passed and `Secret scan (gitleaks)` passed. The first run (39586964758) failed only in the old gitleaks-action step, fixed in PR #1. Branch protection guidance is in the root README. **Applying the protection rule on GitHub is pending the owner** (this session's permission settings blocked it). |
 
 **P1 exit criteria:**
-- **CI passes on an empty skeleton:** *partly met*. The backend job passed (run 39586964758); the secret-scan job is pending the fix branch.
-- **The secret scanner blocks a fake-key commit:** *pending* (needs a CI run or an allowed local hook).
+- **CI passes on an empty skeleton:** **met** (run 39587396126: both jobs green).
+- **The secret scanner blocks a fake-key commit:** *pending* the self-test result on branch `fix/ci-secret-scan-selftest`.
 
 ## Resuming the live test
 
@@ -133,6 +133,7 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 
 | Date | Change |
 |---|---|
+| 2026-10-21 | PR #1 merged; CI green on `main` (run 39587396126). At the owner's request, the commit history on `main` was rewritten to remove AI co-author trailers (contents unchanged; force-pushed with lease; local backup tag kept). New SHAs: `cd57482`, `24ee91b`, `4e40fae`, `d4e134a`. Self-test branch for fake-key detection opened. |
 | 2026-10-21 | Owner pushed `main`. CI backend checks passed; the secret-scan job failed (tool error). Fix on branch `fix/ci-secret-scan`. Owner asked to work in branches from now on. |
 | 2026-10-21 | P1 implemented and committed locally (not pushed). Local checks pass. The CI run and secret-scanner blocking are **unverified** (see P1 task evidence). |
 | 2026-10-21 | Owner authorised **P1** and chose **Option 2** (provider-neutral build track, recorded as AD-25). GitHub repository provided; commit locally, **do not push**. |

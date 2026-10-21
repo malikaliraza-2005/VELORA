@@ -43,3 +43,27 @@ jobs:
           docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" \
             ghcr.io/gitleaks/gitleaks:v8.30.1 \
             git /repo --redact --verbose --exit-code 1
+      # P1 acceptance: prove the scanner FLAGS a commit containing a fake key.
+      # The fake key is assembled at runtime in a throwaway repo, so no secret is
+      # ever committed here. Leaks use exit code 3 so tool errors (exit 1) can't
+      # be mistaken for a detection.
+      - name: Self-test - scanner must flag a fake key
+        run: |
+          tmp="$(mktemp -d)"
+          git -C "$tmp" init -q
+          git -C "$tmp" config user.email ci@example.invalid
+          git -C "$tmp" config user.name ci
+          printf 'aws_access_key_id = "%s%s"\n' "AKIA" "QYLPMN5TBVOW3RDS" > "$tmp/leak.txt"
+          git -C "$tmp" add leak.txt
+          git -C "$tmp" commit -qm "fake key (scanner self-test)"
+          set +e
+          docker run --rm --user "$(id -u):$(id -g)" -v "$tmp:/repo" \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            git /repo --redact --exit-code 3
+          code=$?
+          set -e
+          if [ "$code" -ne 3 ]; then
+            echo "FAIL: expected gitleaks to flag the fake key (exit 3), got exit $code"
+            exit 1
+          fi
+          echo "PASS: the fake-key commit was detected."
