@@ -87,10 +87,10 @@ A task only counts as done when its evidence exists.
 | P1-T2 Toolchain | Done locally | Python 3.12, uv lockfile (`backend/uv.lock`) committed. Locally: `ruff format --check` clean, `ruff check` clean, `mypy --strict` clean, `pytest` 17 passed |
 | P1-T3 Configuration | Done locally | `.env.example` with placeholders only. The placeholder test passes |
 | P1-T4 Secret scanning | **Configured, not verified** | `.pre-commit-config.yaml` (gitleaks v8.30.1) and a CI `secret-scan` job. The local hook couldn't be installed because **Windows Application Control blocked the `pre-commit` launcher**. The fake-key test commit was therefore **not blocked locally**. That test was done in a throwaway repo, since deleted. **Acceptance ("blocks a fake-key commit") is unverified.** |
-| P1-T5 CI and branch protection guidance | **Written, not run** | `.github/workflows/ci.yml`; branch protection guidance in the root `README.md`. **"CI passes on an empty skeleton" is unverified** until the repository is pushed and CI runs |
+| P1-T5 CI and branch protection guidance | **Partly verified** | First push (main @ `3e3b14b`, [CI run 39586964758](https://github.com/malikaliraza-2005/VELORA/actions/runs/39586964758)). The **`Backend checks` job passed on GitHub**: install, format, lint, type check, tests. The **`Secret scan` job failed** with gitleaks-action "Unexpected exit code [1]". This most likely comes from the scan range on the first commit, which has no parent. That's an assumption: the full log needs a GitHub login. Fix on branch `fix/ci-secret-scan`, which scans the full history with a pinned gitleaks image. **Awaiting a CI run on that branch.** |
 
 **P1 exit criteria:**
-- **CI passes on an empty skeleton:** *pending* (needs a push).
+- **CI passes on an empty skeleton:** *partly met*. The backend job passed (run 39586964758); the secret-scan job is pending the fix branch.
 - **The secret scanner blocks a fake-key commit:** *pending* (needs a CI run or an allowed local hook).
 
 ## Resuming the live test
@@ -133,6 +133,7 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 
 | Date | Change |
 |---|---|
+| 2026-10-21 | Owner pushed `main`. CI backend checks passed; the secret-scan job failed (tool error). Fix on branch `fix/ci-secret-scan`. Owner asked to work in branches from now on. |
 | 2026-10-21 | P1 implemented and committed locally (not pushed). Local checks pass. The CI run and secret-scanner blocking are **unverified** (see P1 task evidence). |
 | 2026-10-21 | Owner authorised **P1** and chose **Option 2** (provider-neutral build track, recorded as AD-25). GitHub repository provided; commit locally, **do not push**. |
 | 2026-10-21 | Implementation plan restructured: master roadmap plus 14 phase files in `phases/`. Phase rows now link to their files. **No status, decision or requirement changed.** |
