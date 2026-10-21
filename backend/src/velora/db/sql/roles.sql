@@ -8,6 +8,8 @@
 --   app_rw           Runtime role. NOBYPASSRLS, owns nothing, subject to FORCE RLS.
 --   velora_resolver  NOLOGIN. Owns only the bootstrap resolver function (SECURITY DEFINER),
 --                    and may read only the channel lookup columns.
+--   velora_platform  Founder onboarding tools (`python -m velora.admin`, P3). NOBYPASSRLS,
+--                    owns nothing, works one tenant at a time under the tenant expression.
 
 DO $$
 BEGIN
@@ -20,6 +22,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'velora_resolver') THEN
         CREATE ROLE velora_resolver;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'velora_platform') THEN
+        CREATE ROLE velora_platform;
+    END IF;
 END
 $$;
 
@@ -29,9 +34,12 @@ ALTER ROLE app_rw
     LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
 ALTER ROLE velora_resolver
     NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
+ALTER ROLE velora_platform
+    LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
 
 ALTER ROLE velora_owner SET search_path = velora;
 ALTER ROLE app_rw SET search_path = velora;
+ALTER ROLE velora_platform SET search_path = velora;
 
 -- The migrator must be able to hand the resolver function to velora_resolver, but must not
 -- inherit its privileges (or its RLS policy).

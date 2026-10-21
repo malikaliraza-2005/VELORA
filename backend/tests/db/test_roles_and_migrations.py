@@ -24,7 +24,7 @@ def test_runtime_role_cannot_bypass_rls(db: PgDatabase) -> None:
     assert row == (False, False, False, False, False)
 
 
-@pytest.mark.parametrize("role", [OWNER_ROLE, "velora_resolver"])
+@pytest.mark.parametrize("role", [OWNER_ROLE, "velora_resolver", "velora_platform"])
 def test_other_roles_are_not_privileged(db: PgDatabase, role: str) -> None:
     with db.admin() as conn:
         row = conn.execute(
@@ -34,21 +34,23 @@ def test_other_roles_are_not_privileged(db: PgDatabase, role: str) -> None:
     assert row == (False, False, False)
 
 
-def test_runtime_role_owns_nothing(db: PgDatabase) -> None:
+@pytest.mark.parametrize("role", [APP_ROLE, "velora_platform"])
+def test_runtime_roles_own_nothing(db: PgDatabase, role: str) -> None:
     with db.admin() as conn:
         owned = conn.execute(
             """
             SELECT 'relation ' || oid::regclass::text FROM pg_class
-             WHERE relowner = 'app_rw'::regrole
+             WHERE relowner = %(role)s::regrole
             UNION ALL
             SELECT 'function ' || oid::regprocedure::text FROM pg_proc
-             WHERE proowner = 'app_rw'::regrole
+             WHERE proowner = %(role)s::regrole
             UNION ALL
-            SELECT 'schema ' || nspname FROM pg_namespace WHERE nspowner = 'app_rw'::regrole
+            SELECT 'schema ' || nspname FROM pg_namespace WHERE nspowner = %(role)s::regrole
             UNION ALL
             SELECT 'type ' || oid::regtype::text FROM pg_type
-             WHERE typowner = 'app_rw'::regrole
-            """
+             WHERE typowner = %(role)s::regrole
+            """,
+            {"role": role},
         ).fetchall()
     assert owned == []
 

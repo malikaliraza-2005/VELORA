@@ -26,6 +26,7 @@ TENANT_TABLES: dict[str, str] = {
     "channels": "tenant_id",
     "staff_members": "tenant_id",
     "staff_sessions": "tenant_id",
+    "magic_links": "tenant_id",
     "consents": "tenant_id",
     "owner_verifications": "tenant_id",
     "customers": "tenant_id",
@@ -49,9 +50,31 @@ EXTRA_POLICIES: dict[tuple[str, str], tuple[list[str], str]] = {
     # Bootstrap resolver lookup (P2-T4); the role is NOLOGIN and reachable only through the
     # SECURITY DEFINER resolver function.
     ("channels", "resolver_lookup"): (["velora_resolver"], "SELECT"),
+    # Founder onboarding tools (P3): the platform role may list tenants, and otherwise works
+    # one tenant at a time under the shared tenant expression (checked below).
+    ("tenants", "platform_directory"): (["velora_platform"], "SELECT"),
+    **{
+        (table, "platform_scope"): (["velora_platform"], "ALL")
+        for table in (
+            "tenants",
+            "channels",
+            "staff_members",
+            "staff_sessions",
+            "magic_links",
+            "consents",
+            "owner_verifications",
+            "audit_log",
+        )
+    },
 }
 
-APPEND_ONLY = {"consents", "order_transitions", "audit_log", "channel_events"}
+APPEND_ONLY = {
+    "consents",
+    "owner_verifications",
+    "order_transitions",
+    "audit_log",
+    "channel_events",
+}
 
 tables = pytest.mark.parametrize("table", sorted(TENANT_TABLES))
 
@@ -131,8 +154,10 @@ def test_table_has_forced_rls_and_the_shared_policy(db: PgDatabase, table: str) 
     expected = f"({key} = velora.current_tenant_id())"
     by_name = {p[0]: p[1:] for p in policies}
     assert by_name.pop("tenant_isolation") == ("PERMISSIVE", ["app_rw"], "ALL", expected, expected)
-    for name, (_, roles, cmd, _, _) in by_name.items():
+    for name, (_, roles, cmd, qual, with_check) in by_name.items():
         assert EXTRA_POLICIES.get((table, name)) == (roles, cmd), f"unexpected policy {name}"
+        if name == "platform_scope":
+            assert (qual, with_check) == (expected, expected)
 
 
 def test_runtime_role_has_no_access_to_the_migration_ledger(db: PgDatabase) -> None:

@@ -272,6 +272,61 @@ Stop or pause the pilot on any of these:
 - **Data minimisation:** group, status and broadcast events are ignored and not stored.
 - **Offboarding:** log the session out, then confirm the device has been removed from the phone.
 
+### AD-26: P2 implementation choices (database and tenant isolation)
+- **Roles:**
+  - `velora_owner` is the migrator and owns everything.
+  - `app_rw` is the runtime role: NOBYPASSRLS, NOINHERIT, and owns nothing.
+  - `velora_resolver` is NOLOGIN and owns only the bootstrap resolver, the single SECURITY DEFINER function.
+- **Migrations:** plain SQL files with a checksummed runner. Editing an applied migration is refused. `down` is refused outside development and test.
+- **Schema:**
+  - Child rows use composite `(tenant_id, id)` foreign keys, so a row can't point at another tenant's row.
+  - Money is `bigint` paisa.
+  - Every foreign key is `ON DELETE RESTRICT`.
+  - Customers are soft-deleted and anonymised.
+  - History tables are append-only for the runtime role.
+- **Findings for later phases:**
+  - **P5:** under FORCE RLS, a worker can't claim queue jobs across tenants with `SKIP LOCKED`. This needs a design that keeps the resolver as the only SECURITY DEFINER function.
+  - **P11:** `pg_dump` needs a role that bypasses RLS, and database-level grants are not in a plain `pg_dump`.
+- **Evidence:** PR #3. CI runs 39590467933 (PR) and 39590889951 (`main` after the merge).
+
+### AD-27: P3 implementation choices (onboarding and staff identity)
+- **B7, magic-link delivery: manual for the pilot.**
+  - VELORA does not send login links. The founder's tool prints the owner's link, and the dashboard returns staff links to the owner. Each link is passed on privately.
+  - The token sits in the URL fragment, so it never reaches server or proxy logs.
+  - *Trade-off:* whoever issues a link can see it. Links are single-use, expire after 15 minutes and are audited. The payment PIN is set by the person after they sign in.
+  - Email delivery can replace this later without changing the data model.
+- **Admin onboarding is a command-line tool (`python -m velora.admin`), not web screens.** This means there is no internet-facing admin surface during the pilot. Web screens can come with P9.
+- **Platform role:** `velora_platform` runs the founder tool.
+  - It is NOBYPASSRLS and owns nothing.
+  - It works one tenant at a time, under the same tenant expression as the runtime (`platform_scope` policies).
+  - Its only cross-tenant right is listing tenants (`platform_directory`).
+  - No new SECURITY DEFINER function was added.
+- **Tokens:** magic-link and session tokens contain the tenant id as an **unverified lookup hint**.
+  - A token is accepted only if the SHA-256 of its 256-bit secret matches a row inside that tenant's RLS scope.
+  - A forged tenant id therefore finds nothing.
+  - This avoids a second cross-tenant lookup function.
+- **Roles:** owner, manager, kitchen and kitchen_device. The P2 value `staff` was renamed `kitchen`.
+  - Only the owner manages staff (AD-12).
+  - Managers can do everything else.
+  - Kitchen staff can view and update orders and confirm payments with their PIN.
+  - A kitchen device can only view and update orders. To confirm a payment on a kitchen device, a named person enters their own PIN.
+- **Payment PIN:**
+  - 6 digits, with repeated and consecutive digits refused.
+  - Stored as a salted scrypt hash.
+  - 5 wrong tries lock it for 15 minutes, and the owner can reset it.
+  - Every rejection is audited.
+- **Sessions and CSRF:**
+  - The session cookie is `__Host-`, HttpOnly, Secure and SameSite=Strict.
+  - State-changing requests need a CSRF header derived from the session.
+  - A browser `Origin` header must match the dashboard.
+- **Login rate limit:** in-process, 10 attempts per 5 minutes per client address, which fits one API container (AD-19). **P12 must configure trusted proxy headers.** Otherwise every client shares the proxy's address and the limit becomes global.
+- **Going live:**
+  - A tenant needs an effective, verified owner verification and an effective `separate_number_ban_risk` consent. The database enforces this with a trigger.
+  - Terms and data-processing consents are not required until the legal review (B2).
+- **Records:**
+  - Consents, owner verifications and the audit log can't be updated, deleted or truncated, even by a superuser (database triggers).
+  - A correction is a new record that supersedes the old one.
+
 ---
 
 ## 3. VALIDATION-DEPENDENT decisions (decided only after the OpenWA trial)
@@ -418,7 +473,7 @@ A few GB of dumps is probably **$0** on R2 or B2, depending on how long dumps ar
 
 ## 8. Items for owner review
 
-1. **Every ADOPTED (delegated) decision (AD-11 to AD-24).** They stand unless you reverse them.
+1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26, AD-27).** They stand unless you reverse them.
 2. **The optional customer order-tracking link (§5).** Not approved.
 3. **The validation-dependent decisions V-01 to V-10.** These come back to you with the trial evidence.
 4. **The cost commitment.** Approve only after vendor checks and V-03.

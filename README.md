@@ -2,8 +2,8 @@
 
 Pakistan-first, WhatsApp-based ordering SaaS for restaurants and cloud kitchens (hotels later).
 
-> **Project status:** early build. Phase **P1 (repository foundation)** is in progress.
-> No product features exist yet, and nothing connects to WhatsApp.
+> **Project status:** early build. P1–P3 are complete (repository, database and tenant isolation, staff identity).
+> Nothing connects to WhatsApp yet.
 > See [`docs/planning/implementation-status.md`](docs/planning/implementation-status.md).
 
 ## Repository layout
@@ -58,7 +58,7 @@ All work happens on short-lived branches. `main` only changes through pull reque
 
 ## Branch protection guidance (GitHub)
 
-Apply these once the repository is pushed. Settings → Branches → Add rule for `main`:
+These are not applied yet; the owner applies them. Settings → Branches → Add rule for `main`:
 
 1. **Require a pull request before merging.** At least 1 approval once there is more than one contributor.
 2. **Require status checks to pass:** `Backend checks` and `Secret scan (gitleaks)`.

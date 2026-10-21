@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Authorisation** | **NOT AUTHORISED.** Needs the owner's explicit approval. |
+| **Authorisation** | **AUTHORISED** by the owner, 2026-10-21 ("Start P2"). **Complete** (PR #3; implementation choices in AD-26). |
 | **Depends on** | P1 |
 | **Blocks** | P3, P4, P5, P11 |
 | **Effort (estimate)** | 1–1.5 weeks |

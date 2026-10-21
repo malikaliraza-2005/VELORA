@@ -1,4 +1,4 @@
-"""PostgreSQL fixtures for the P2 database tests.
+"""PostgreSQL fixtures for the database tests (P2 onwards).
 
 Environment:
   VELORA_TEST_ADMIN_URL    superuser URL of a disposable PostgreSQL 17 server. Without it the
@@ -14,6 +14,7 @@ fresh, uniquely named database, which is dropped afterwards.
 
 from __future__ import annotations
 
+import functools
 import os
 import secrets
 import shlex
@@ -32,6 +33,7 @@ from velora.db.migrate import migrate_up, setup_roles
 
 APP_ROLE = "app_rw"
 OWNER_ROLE = "velora_owner"
+PLATFORM_ROLE = "velora_platform"
 
 
 @dataclass(frozen=True)
@@ -92,6 +94,9 @@ class PgDatabase:
     def app(self) -> psycopg.Connection[Any]:
         return psycopg.connect(self.cluster.url(self.name, APP_ROLE))
 
+    def platform(self) -> psycopg.Connection[Any]:
+        return psycopg.connect(self.cluster.url(self.name, PLATFORM_ROLE))
+
 
 @pytest.fixture(scope="session")
 def cluster() -> Cluster:
@@ -100,9 +105,15 @@ def cluster() -> Cluster:
         if os.environ.get("VELORA_REQUIRE_DB_TESTS") == "1":
             pytest.fail("VELORA_REQUIRE_DB_TESTS=1 but VELORA_TEST_ADMIN_URL is not set")
         pytest.skip("VELORA_TEST_ADMIN_URL not set; database tests skipped")
+    return _prepare_cluster(admin_url)
 
+
+@functools.cache
+def _prepare_cluster(admin_url: str) -> Cluster:
+    """Once per test process, even when another conftest re-exports these fixtures: the role
+    passwords are cluster-wide, so setting them twice would break the first Cluster."""
     setup_roles(admin_url)
-    passwords = {role: secrets.token_urlsafe(24) for role in (OWNER_ROLE, APP_ROLE)}
+    passwords = {role: secrets.token_urlsafe(24) for role in (OWNER_ROLE, APP_ROLE, PLATFORM_ROLE)}
     with psycopg.connect(admin_url, autocommit=True) as conn:
         for role, password in passwords.items():
             conn.execute(
