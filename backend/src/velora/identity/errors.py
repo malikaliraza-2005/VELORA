@@ -1,4 +1,4 @@
-"""Errors raised by the identity services. The API maps them to HTTP status codes."""
+"""Errors raised by the services (identity, menu, ordering). The API maps them to HTTP codes."""
 
 from __future__ import annotations
 
@@ -39,3 +39,11 @@ class PinRejectedError(IdentityError):
     def __init__(self, reason: str) -> None:
         super().__init__("PIN not accepted")
         self.reason = reason
+
+
+class ValidationProblemsError(InvalidInputError):
+    """Input failed several checks at once, e.g. a menu CSV. Each problem is shown to the user."""
+
+    def __init__(self, message: str, problems: list[dict[str, Any]]) -> None:
+        super().__init__(message)
+        self.problems = problems

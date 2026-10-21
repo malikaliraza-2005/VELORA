@@ -327,6 +327,51 @@ Stop or pause the pilot on any of these:
   - Consents, owner verifications and the audit log can't be updated, deleted or truncated, even by a superuser (database triggers).
   - A correction is a new record that supersedes the old one.
 
+### AD-28: P4 implementation choices (menu, availability and settings)
+- **Menu versions:**
+  - A menu version is a complete relational catalogue: categories, items, modifier groups and options, all with integer paisa prices.
+  - Each tenant has at most one draft.
+  - Publishing freezes a version. Database triggers then refuse any change to it or its rows, even by a superuser.
+  - `menu_publications` is the append-only history, and the newest publication is the live menu.
+  - **Rollback** means re-publishing an older version.
+- **One write path:**
+  - CSV import and form entry (`PUT /api/menu/draft`) both replace the whole draft, after the same validator.
+  - Draft content is never updated row by row (no UPDATE grant).
+- **No accidental go-live:**
+  - Publishing needs the revision the reviewer saw. If the draft changed since, the request gets 409.
+  - The database only accepts a publication of a frozen version.
+  - Customer-facing reads use only the newest publication.
+- **Founder import:**
+  - The founder's command-line tool (`menu-import`) fills the draft as `velora_platform`.
+  - That role can't freeze or publish. The owner reviews the draft, including its price changes against the live menu, and publishes it.
+  - This is how we read "form entry by the founder" while AD-27 keeps admin web screens out of the pilot.
+- **Price audit:** every draft save, import and publication is audited in the same transaction, with the SKUs added and removed and every price change (from and to).
+- **Permissions:**
+  - Menu editing, publishing and availability need `menu.edit` (owner, manager).
+  - Settings, pause and resume need `settings.edit` (owner, manager).
+  - The pause status view needs only `orders.view`, so kitchen roles can see it.
+  - *Trade-off:* kitchen staff can't mark an item sold out or pause orders themselves during a rush. Granting that is a one-line change to the role matrix if the owner wants it.
+- **Availability:**
+  - Availability is per SKU and outside the versions, so a toggle applies at once and carries into later versions.
+  - It doesn't reset automatically each day.
+  - There is no per-option availability yet.
+- **Pause:**
+  - Pause sets an end time (1 minute to 12 hours) and ends by itself.
+  - Every cart check reads the database with no cache, so a pause applies to the next cart.
+- **Capacity:**
+  - An atomic per-tenant counter for each 15-minute slot, counted at order time. Slots are aligned to the epoch, which gives quarter hours in Pakistan time.
+  - P7 claims a place inside the order transaction, so concurrent orders can't overshoot the cap.
+  - Releasing a place on cancellation is left to P7.
+- **Pricing:**
+  - Unit price = item + chosen options.
+  - Delivery adds the flat fee, and the delivery minimum applies to the item subtotal.
+  - Tax is the payment method's rate in basis points of the item subtotal, rounded half up.
+  - A method with no rate set **can't be quoted**, rather than being silently untaxed.
+  - Whether tax also applies to the delivery fee, and the rates themselves, stay **PENDING EXTERNAL** (B3).
+- **Settings row:** one per tenant, created with database defaults on first use. Defaults: delivery and takeaway on, fee 0, pickup 20–240 minutes, COD and transfer on, transfer window 30 minutes, no COD limit, no capacity cap, tax not set. Per-merchant values are set with each merchant (PENDING EXTERNAL).
+- **Not gated:** going live doesn't require a published menu. The ordering gate refuses carts without one.
+- **Evidence:** PR #5. CI run 39598901486 (491 tests).
+
 ---
 
 ## 3. VALIDATION-DEPENDENT decisions (decided only after the OpenWA trial)
@@ -473,7 +518,7 @@ A few GB of dumps is probably **$0** on R2 or B2, depending on how long dumps ar
 
 ## 8. Items for owner review
 
-1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26, AD-27).** They stand unless you reverse them.
+1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-28).** They stand unless you reverse them.
 2. **The optional customer order-tracking link (§5).** Not approved.
 3. **The validation-dependent decisions V-01 to V-10.** These come back to you with the trial evidence.
 4. **The cost commitment.** Approve only after vendor checks and V-03.

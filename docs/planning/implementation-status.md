@@ -15,10 +15,11 @@
 | **P1** | **Complete (2026-10-21).** Both exit criteria verified in CI. |
 | **P2** | **Complete (2026-10-21).** Authorised by the owner ("Start P2"). Merged in PR #3; CI green. |
 | **P3** | **Complete (2026-10-21).** Authorised by the owner ("Start P3"). PR #4; all five exit criteria verified in CI. See "P3 task evidence". |
-| **P4–P13** | **Not started. Not authorised.** |
+| **P4** | **Complete (2026-10-21).** Authorised by the owner ("Start P4"). PR #5; all four exit criteria verified in CI. See "P4 task evidence". |
+| **P5–P13** | **Not started. Not authorised.** |
 | **Provider-neutral track (AD-25)** | Owner decision 2026-10-21: the provider-neutral parts of P5, and P6–P9, may be built against the `FakeProvider` before the OpenWA Go, each once it is authorised. |
 | **OpenWA adapter, real WhatsApp traffic, P10–P13** | **Blocked** until the live validation is complete and the owner gives a Go (V-01). |
-| **Application code** | P1 skeleton, the P2 database layer, and P3 staff identity (login, sessions, roles, PINs, audit, founder onboarding tool). No ordering or WhatsApp features. |
+| **Application code** | P1 skeleton, the P2 database layer, P3 staff identity (login, sessions, roles, PINs, audit, founder onboarding tool), and P4 menu and ordering controls (versioned catalogue, CSV import, publish and rollback, availability, pause, capacity, settings, server-side pricing). No conversation, order or WhatsApp features. |
 | **Purchases / subscriptions** | None. |
 
 **What the owner can provide right now:**
@@ -40,8 +41,8 @@ A reduced live-trial variant that fits these constraints is **proposed, not appr
 | [P0 Pre-implementation gates](phases/p00-pre-implementation-gates.md) | **Desk research in progress; live test paused** | Test SIM; machine to run OpenWA; volunteers (reduced variant proposed); lawyer/accountant budget | Desk review notes (see P0 tasks) | Finish desk tasks; owner decides on the reduced trial variant |
 | [P1 Repository foundation](phases/p01-repository-foundation.md) | **Complete** (2026-10-21) | — | CI runs 39587396126 (main) and 39587837550 (PR #2 self-test); see "P1 task evidence" | Owner: apply the branch protection rule (see README) |
 | [P2 Database and tenant isolation](phases/p02-database-and-tenant-isolation.md) | **Complete** (2026-10-21) | — | PR #3; CI runs 39590467933 (PR) and 39590889951 (main); 187 tests | — |
-| [P3 Onboarding and staff identity](phases/p03-onboarding-and-staff-identity.md) | **Complete** (2026-10-21) | — (B7 resolved for the pilot: manual delivery, AD-27) | PR #4; CI run 39594079256 (315 tests); see "P3 task evidence" | Owner: review AD-27; authorise P4 when ready |
-| [P4 Menu, availability and settings](phases/p04-menu-availability-and-settings.md) | Not started; not authorised | P2, P3; tax values (accountant) | — | — |
+| [P3 Onboarding and staff identity](phases/p03-onboarding-and-staff-identity.md) | **Complete** (2026-10-21) | — (B7 resolved for the pilot: manual delivery, AD-27) | PR #4; CI run 39594079256 (315 tests); see "P3 task evidence" | Owner: review AD-27 |
+| [P4 Menu, availability and settings](phases/p04-menu-availability-and-settings.md) | **Complete** (2026-10-21) | — (tax values wait for the accountant, B3; quotes are refused until set) | PR #5; CI run 39598901486 (491 tests); see "P4 task evidence" | Owner: review AD-28; authorise the next phase when ready |
 | [P5 Provider abstraction and OpenWA adapter](phases/p05-whatsapp-provider-and-openwa-adapter.md) | Not started — **blocked** | **Live validation + Go (V-01)**; V-02, V-04, V-05, V-06, V-07, V-08 | — | — |
 | [P6 Conversation workflows](phases/p06-conversation-workflows.md) | Not started — blocked (depends on P5) | P4, P5; AI model choice; V-09 | — | — |
 | [P7 Order lifecycle](phases/p07-order-lifecycle.md) | Not started — blocked (depends on P6) | P6 | — | — |
@@ -129,6 +130,28 @@ Implementation choices are recorded as **ADOPTED (delegated)** in decisions AD-2
 - **P9:** the login page reads the token from the URL fragment and posts it to `/api/auth/login`.
 - **P12:** configure trusted proxy headers, or the login rate limit becomes global.
 
+## P4 task evidence (2026-10-21)
+
+Implementation choices are recorded as **ADOPTED (delegated)** in decisions AD-28, for owner review.
+
+| Task | Status | Evidence (tests in `backend/tests/`) |
+|---|---|---|
+| P4-T1 Catalogue schema and APIs | Done | Migration `0006`. `db/test_isolation.py` covers the 9 new tables (FORCE RLS, cross-tenant, fail-closed). `db/test_menu_schema.py`: published versions can't change (even for the administrator), prices can't be negative, SKUs are unique. `api/test_menu.py`: price changes audited with from/to values |
+| P4-T2 Import and validation | Done | `menu/test_csv_import.py`: each rule (negative price, required fields, duplicate SKU, format, header, options) gives a line-level error. `api/test_menu.py`: an invalid CSV is rejected with line errors and nothing is saved; founder `menu-import` fills a draft only |
+| P4-T3 Draft, review and publish | Done | `api/test_menu.py`: draft items are invisible to customer-facing reads; re-publishing the previous version restores it; publishing a stale revision is refused. `db/test_menu_schema.py`: only a frozen version can be published; the platform role can't publish or freeze |
+| P4-T4 Availability toggles | Done | `api/test_menu.py`: an unavailable item is never offered or priced, and stays unavailable across a re-publish |
+| P4-T5 Pause and capacity | Done | `api/test_ordering.py`: pausing blocks new carts within 5 seconds; the capacity cap rejects orders above the limit and reopens in the next slot; 10 concurrent claims never overshoot a cap of 3 |
+| P4-T6 Settings | Done (placeholder tax values only, B3) | `api/test_ordering.py`: each setting is applied by pricing (fee, minimum, tax by payment method, switched-off options); an unset tax rate refuses the quote; changes are audited with old and new values; kitchen roles are refused. `ordering/test_pricing.py`: pricing and rule unit tests |
+
+**P4 exit criteria:** all four are **met in CI**: [run 39598901486](https://github.com/malikaliraza-2005/VELORA/actions/runs/39598901486) (PR #5). 491 tests passed against PostgreSQL 17, and the secret scan was clean.
+
+**Findings for later phases:**
+- **P6:** offer only `LiveMenu.offerable()`. Price every cart with `velora.ordering.pricing.price_cart` and check `gate.check_new_cart` before starting a cart. Pickup times use `check_pickup_time`.
+- **P7:** inside the order transaction, re-run the gate and `price_cart` and compare with the quote (`menu_version_id` and the totals). Then call `gate.claim_capacity`. Releasing a place on cancellation still needs designing. `order_items` has no column for chosen options yet, so a migration is needed to snapshot them.
+- **P8:** use `cod_allowed` (first-order limit) and `transfer_deadline` (transfer window).
+- **P9:** the dashboard uses `/api/menu/*`, `/api/ordering/*` and `/api/settings/ordering`.
+- **P13:** set tax rates only after the accountant confirms them (B3). Until then, quotes for that payment method are refused.
+
 ## Resuming the live test
 
 The owner provides:
@@ -153,12 +176,12 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 | B5 | Vendor prices not fully verified (see price sheet) | Infrastructure commitment (P12) | Engineering |
 | B6 | AI model not selected (no real dataset) | P6 | Engineering |
 | B7 | ~~Delivery channel for staff magic links undecided~~ **Resolved for the pilot:** manual delivery (AD-27, ADOPTED (delegated)). Email is a later option | — | Engineering |
-| B8 | Owner authorisation for P4–P13 (P1, P2 and P3 authorised 2026-10-21) | P4 onwards | Owner |
+| B8 | Owner authorisation for P5–P13 (P1 to P4 authorised 2026-10-21) | P5 onwards | Owner |
 | B9 | Reduced trial variant and trial tooling (P0-E1) not approved | Resuming the live test | Owner |
 
 ## Decisions awaiting the owner
 
-- Review the **ADOPTED (delegated)** decisions AD-11 to AD-24, AD-26 and AD-27 ([decisions §8](../architecture/architecture-decisions.md#8-items-for-owner-review)).
+- Review the **ADOPTED (delegated)** decisions AD-11 to AD-24 and AD-26 to AD-28 ([decisions §8](../architecture/architecture-decisions.md#8-items-for-owner-review)).
 - Approve or reject the **reduced live-trial variant** ([validation plan §9](openwa-validation-plan.md)).
 - **Go/No-Go and V-01 to V-10:** after the live trial.
 - **Infrastructure cost commitment:** after vendor checks.
@@ -169,6 +192,7 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 
 | Date | Change |
 |---|---|
+| 2026-10-21 | Owner authorised **P4** ("Start P4"). P4 implemented and verified in CI (PR #5, run 39598901486; migration 0006; 491 tests). Decision AD-28 (P4 choices) recorded as ADOPTED (delegated). |
 | 2026-10-21 | Owner authorised **P3** ("Start P3"). P3 implemented and verified in CI (PR #4, run 39594079256), and B7 resolved for the pilot (manual delivery). Decisions AD-26 (P2 choices) and AD-27 (P3 choices) recorded as ADOPTED (delegated). |
 | 2026-10-21 | **P2 complete.** Owner authorised P2 ("Start P2"); merged in PR #3, CI green (runs 39590467933 and 39590889951). |
 | 2026-10-21 | **P1 complete.** The PR #2 CI self-test proved fake-key detection (run 39587837550). |
