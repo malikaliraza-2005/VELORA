@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Authorisation** | **NOT AUTHORISED.** Once authorised and once P7 is complete (as built so far), it may be built and tested against the `FakeProvider` before the OpenWA Go ([AD-25](../../architecture/architecture-decisions.md#ad-25-provider-neutral-build-track-while-the-openwa-test-waits)). Tests that need real WhatsApp traffic stay gated by the Go. |
+| **Authorisation** | **Authorised by the owner ("Start P8", 2026-10-21).** Built and tested against the `FakeProvider` before the OpenWA Go ([AD-25](../../architecture/architecture-decisions.md#ad-25-provider-neutral-build-track-while-the-openwa-test-waits)). Tests that need real WhatsApp traffic stay gated by the Go. Implementation choices: [AD-32](../../architecture/architecture-decisions.md#ad-32-p8-implementation-choices-payment-verification). |
 | **Depends on** | P7, P3 |
 | **Blocks** | P9 |
 | **Effort (estimate)** | about 1 week |
@@ -14,6 +14,7 @@
 |---|---|
 | AD-03: COD plus staff-verified transfers; **AI output, customer text or a screenshot never marks an order as paid**; VELORA never holds funds | APPROVED |
 | AD-23: staff PIN for payment confirmation | ADOPTED (delegated) |
+| AD-32: P8 implementation choices | ADOPTED (delegated) |
 | COD limits and transfer windows per restaurant | PENDING EXTERNAL |
 | Online payment provider | **Post-MVP.** Only after sandbox tests (decisions §4) |
 
