@@ -9,15 +9,27 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 VALID_ENVS = frozenset({"development", "test", "staging", "production"})
 VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR"})
+PLACEHOLDER = "CHANGE_ME"
+
+
+def _optional(source: Mapping[str, str], name: str) -> str | None:
+    value = source.get(name, "").strip()
+    return None if not value or value == PLACEHOLDER else value
 
 
 @dataclass(frozen=True)
 class Settings:
     env: str
     log_level: str
+    # Runtime role (app_rw). None leaves the staff API unavailable (503), e.g. in unit tests.
+    database_url: str | None = None
+    # Origin of the staff dashboard. Magic links point here, and state-changing requests
+    # that carry an Origin header must come from it.
+    public_base_url: str = "http://localhost:8000"
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Settings:
@@ -30,4 +42,26 @@ class Settings:
             raise ValueError(
                 f"VELORA_LOG_LEVEL must be one of {sorted(VALID_LOG_LEVELS)}, got {log_level!r}"
             )
-        return cls(env=env, log_level=log_level)
+        configured = _optional(source, "VELORA_PUBLIC_BASE_URL")
+        base_url = (configured or cls.public_base_url).rstrip("/")
+        parts = urlsplit(base_url)
+        if parts.scheme not in {"http", "https"} or not parts.netloc or parts.path:
+            raise ValueError(f"VELORA_PUBLIC_BASE_URL must be an origin, got {base_url!r}")
+        if configured and env in {"staging", "production"} and parts.scheme != "https":
+            raise ValueError("VELORA_PUBLIC_BASE_URL must use https in staging and production")
+        return cls(
+            env=env,
+            log_level=log_level,
+            database_url=_optional(source, "VELORA_DATABASE_URL"),
+            public_base_url=base_url,
+        )
+
+    @property
+    def public_origin(self) -> str:
+        parts = urlsplit(self.public_base_url)
+        return f"{parts.scheme}://{parts.netloc}"
+
+    def magic_link_url(self, token: str) -> str:
+        # The token travels in the fragment, which browsers never send to servers or proxies,
+        # so it stays out of access logs. The dashboard page posts it to /api/auth/login.
+        return f"{self.public_base_url}/login#{token}"

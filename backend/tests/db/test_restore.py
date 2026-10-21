@@ -100,6 +100,8 @@ def test_role_dump_keeps_role_attributes(cluster: Cluster) -> None:
     assert "NOSUPERUSER" in role_line("app_rw")
     assert "NOBYPASSRLS" in role_line("velora_owner")
     assert "NOLOGIN" in role_line("velora_resolver")
+    assert "NOBYPASSRLS" in role_line("velora_platform")
+    assert "ALTER ROLE velora_platform SET search_path TO 'velora';" in lines
     assert "ALTER ROLE app_rw SET search_path TO 'velora';" in lines
     # SET TRUE is the default, so pg_dumpall prints only the non-default INHERIT FALSE.
     grants = [ln for ln in lines if ln.startswith("GRANT velora_resolver TO velora_owner")]

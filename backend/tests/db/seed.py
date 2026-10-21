@@ -53,6 +53,13 @@ def seed_tenant(conn: psycopg.Connection[Any], slug: str, prefix: str) -> dict[s
             "VALUES (%s, %s, %s, %s) RETURNING id",
             (t, staff, secrets.token_bytes(32), now + timedelta(days=30)),
         )
+        ids["magic_links"] = _one(
+            conn,
+            "INSERT INTO velora.magic_links (tenant_id, staff_member_id, token_hash, purpose, "
+            "issued_by_kind, created_at, expires_at) "
+            "VALUES (%s, %s, %s, 'invite', 'platform', %s, %s) RETURNING id",
+            (t, staff, secrets.token_bytes(32), now, now + timedelta(minutes=15)),
+        )
         ids["consents"] = _one(
             conn,
             "INSERT INTO velora.consents (tenant_id, kind, document_version, document_sha256, "

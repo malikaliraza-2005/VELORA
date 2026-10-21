@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Authorisation** | **NOT AUTHORISED.** Needs the owner's explicit approval. |
+| **Authorisation** | **AUTHORISED** by the owner, 2026-10-21 ("Start P3"). Implementation choices in AD-27. |
 | **Depends on** | P2 |
 | **Blocks** | P4, P8, P9 |
 | **Effort (estimate)** | about 1 week |
@@ -16,7 +16,7 @@
 | AD-12: human owner verification; manual recovery; staff added by owner invite | ADOPTED (delegated) |
 | AD-18: separate ordering number plus written consent | ADOPTED (delegated) |
 | AD-23: staff authentication | ADOPTED (delegated) |
-| Magic-link delivery channel | **Unresolved** (blocker B7) |
+| AD-27: P3 implementation choices, including magic-link delivery (B7: manual for the pilot) | ADOPTED (delegated) |
 
 ## Objective and scope
 - **Objective:** create businesses safely and give staff authenticated, scoped access.
@@ -105,4 +105,5 @@
 - **Risks and rollback:** delivering the magic link depends on a channel. Fallback: the founder delivers the link manually during the pilot.
 
 ## Open items
-- B7: magic-link delivery channel (email, or manual delivery by the founder; WhatsApp would depend on the provider).
+- B7: **resolved for the pilot.** Links are delivered manually (AD-27). Email is a later option. WhatsApp would depend on the provider.
+- **Deviation:** the admin onboarding "screens" are a command-line tool for the pilot (AD-27). Web screens can come with P9.

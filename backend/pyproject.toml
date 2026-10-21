@@ -5,6 +5,7 @@ description = "VELORA backend: WhatsApp ordering SaaS for restaurants (FastAPI i
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "anyio>=4.15.1",
     "fastapi",
     "psycopg-pool>=3.3.3",
     "psycopg[binary]>=3.3.6",
