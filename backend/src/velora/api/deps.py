@@ -22,6 +22,8 @@ from velora.identity.ratelimit import RateLimiter
 from velora.identity.sessions import SessionService, StaffSession
 from velora.identity.staff import StaffService
 from velora.identity.tokens import csrf_matches
+from velora.menu.service import MenuService
+from velora.ordering.service import OrderingService
 
 SESSION_COOKIE = "__Host-velora_session"
 CSRF_HEADER = "X-CSRF-Token"
@@ -34,6 +36,8 @@ class Services:
     clock: Clock
     sessions: SessionService
     staff: StaffService
+    menu: MenuService
+    ordering: OrderingService
     login_limiter: RateLimiter
 
 

@@ -12,11 +12,14 @@ channel-register     --tenant --provider --session-ref
 owner-invite         --tenant --name           prints a 15-minute invite link
 recovery-link        --tenant --staff-id       prints a 15-minute login link (recovery runbook)
 go-live              --tenant
+menu-import          --tenant --file CSV       loads the CSV into the draft menu; the owner
+                                               reviews and publishes it on the dashboard
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
 import hashlib
 import os
 import sys
@@ -26,6 +29,7 @@ from typing import get_args
 
 import psycopg
 
+from velora.admin.menu import import_menu
 from velora.admin.onboarding import (
     ConsentKind,
     Onboarding,
@@ -36,6 +40,7 @@ from velora.admin.onboarding import (
     VerificationStatus,
 )
 from velora.config import PLACEHOLDER, Settings
+from velora.menu.csv_import import CsvImportError
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -82,6 +87,10 @@ def _parser() -> argparse.ArgumentParser:
 
     go_live = commands.add_parser("go-live")
     go_live.add_argument("--tenant", required=True)
+
+    menu = commands.add_parser("menu-import")
+    menu.add_argument("--tenant", required=True)
+    menu.add_argument("--file", required=True, type=Path)
     return parser
 
 
@@ -90,6 +99,16 @@ def _print_link(settings: Settings, invite: OwnerInvite) -> None:
     print(f"expires at: {invite.expires_at.isoformat(timespec='seconds')}")
     print("link (single use; pass it on privately, never in a group chat):")
     print(settings.magic_link_url(invite.token.wire()))
+
+
+def _menu_import(args: argparse.Namespace, ops: Onboarding, url: str) -> None:
+    tenant = ops.tenant_by_slug(args.tenant)
+    data = args.file.read_bytes()
+    # psycopg's async mode cannot use the Windows proactor event loop.
+    loop = asyncio.SelectorEventLoop if sys.platform == "win32" else None
+    result = asyncio.run(import_menu(url, tenant, data, operator=args.operator), loop_factory=loop)
+    print(f"draft menu version {result.version_no} (revision {result.revision}): ", end="")
+    print(f"{result.items} items. The owner must review and publish it on the dashboard.")
 
 
 def run(args: argparse.Namespace, ops: Onboarding, settings: Settings) -> None:
@@ -149,7 +168,17 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env()
     try:
         with psycopg.connect(url) as conn:
-            run(args, Onboarding(conn, operator=args.operator), settings)
+            ops = Onboarding(conn, operator=args.operator)
+            if args.command == "menu-import":
+                _menu_import(args, ops, url)
+            else:
+                run(args, ops, settings)
+    except CsvImportError as exc:
+        print(f"error: {exc}; nothing was saved", file=sys.stderr)
+        for problem in exc.problems:
+            where = f"line {problem.line}" if problem.line is not None else "file"
+            print(f"  {where}: {problem.message}", file=sys.stderr)
+        return 1
     except (OnboardingError, psycopg.errors.IntegrityError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

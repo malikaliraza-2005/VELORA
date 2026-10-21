@@ -40,6 +40,15 @@ TENANT_TABLES: dict[str, str] = {
     "payments": "tenant_id",
     "audit_log": "tenant_id",
     "channel_events": "tenant_id",
+    "menu_versions": "tenant_id",
+    "menu_categories": "tenant_id",
+    "menu_items": "tenant_id",
+    "modifier_groups": "tenant_id",
+    "modifier_options": "tenant_id",
+    "menu_publications": "tenant_id",
+    "menu_item_availability": "tenant_id",
+    "ordering_settings": "tenant_id",
+    "order_capacity_slots": "tenant_id",
 }
 
 # Tables in the velora schema that are deliberately global (no tenant). Each needs a reason.
@@ -64,6 +73,13 @@ EXTRA_POLICIES: dict[tuple[str, str], tuple[list[str], str]] = {
             "consents",
             "owner_verifications",
             "audit_log",
+            # P4: the founder's menu import fills a draft (but can't publish it).
+            "menu_versions",
+            "menu_categories",
+            "menu_items",
+            "modifier_groups",
+            "modifier_options",
+            "menu_publications",
         )
     },
 }
@@ -74,7 +90,11 @@ APPEND_ONLY = {
     "order_transitions",
     "audit_log",
     "channel_events",
+    "menu_publications",
 }
+
+# Saved as a whole (delete and re-insert), never updated in place: the menu draft content.
+REPLACED_WHOLE = {"menu_categories", "menu_items", "modifier_groups", "modifier_options"}
 
 tables = pytest.mark.parametrize("table", sorted(TENANT_TABLES))
 
@@ -209,7 +229,7 @@ def test_cross_tenant_update_affects_zero_rows(
     with db.app() as conn, conn.transaction(force_rollback=True):
         column = _updatable_column(conn, table)
         if column is None:
-            assert table in APPEND_ONLY
+            assert table in APPEND_ONLY | REPLACED_WHOLE
             return
         _as_tenant(conn, tenants.a["tenants"])
         query = sql.SQL("UPDATE {t} SET {c} = {c} WHERE id = %s").format(

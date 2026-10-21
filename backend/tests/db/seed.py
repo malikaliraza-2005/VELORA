@@ -141,6 +141,62 @@ def seed_tenant(conn: psycopg.Connection[Any], slug: str, prefix: str) -> dict[s
             "VALUES (%s, 'system', 'order.created', 'order', %s) RETURNING id",
             (t, order),
         )
+        # P4: one published menu version with one row in each catalogue table.
+        ids["menu_versions"] = version = _one(
+            conn,
+            "INSERT INTO velora.menu_versions (tenant_id, version_no, created_by_kind, "
+            "created_by_staff_id) VALUES (%s, 1, 'staff', %s) RETURNING id",
+            (t, staff),
+        )
+        ids["menu_categories"] = category = _one(
+            conn,
+            "INSERT INTO velora.menu_categories (tenant_id, menu_version_id, position, name) "
+            "VALUES (%s, %s, 0, 'Burgers') RETURNING id",
+            (t, version),
+        )
+        ids["menu_items"] = item = _one(
+            conn,
+            "INSERT INTO velora.menu_items (tenant_id, menu_version_id, category_id, position, "
+            "sku, name, price_paisa) VALUES (%s, %s, %s, 0, 'BURGER-1', 'Zinger Burger', 45000) "
+            "RETURNING id",
+            (t, version, category),
+        )
+        ids["modifier_groups"] = group = _one(
+            conn,
+            "INSERT INTO velora.modifier_groups (tenant_id, menu_version_id, item_id, position, "
+            "name, min_select, max_select) VALUES (%s, %s, %s, 0, 'Size', 1, 1) RETURNING id",
+            (t, version, item),
+        )
+        ids["modifier_options"] = _one(
+            conn,
+            "INSERT INTO velora.modifier_options (tenant_id, menu_version_id, group_id, position, "
+            "name, price_delta_paisa) VALUES (%s, %s, %s, 0, 'Regular', 0) RETURNING id",
+            (t, version, group),
+        )
+        conn.execute("UPDATE velora.menu_versions SET frozen_at = now() WHERE id = %s", (version,))
+        ids["menu_publications"] = _one(
+            conn,
+            "INSERT INTO velora.menu_publications (tenant_id, publication_no, menu_version_id, "
+            "published_by_staff_id) VALUES (%s, 1, %s, %s) RETURNING id",
+            (t, version, staff),
+        )
+        ids["menu_item_availability"] = _one(
+            conn,
+            "INSERT INTO velora.menu_item_availability (tenant_id, sku, is_available, "
+            "updated_by_staff_id) VALUES (%s, 'BURGER-1', true, %s) RETURNING id",
+            (t, staff),
+        )
+        ids["ordering_settings"] = _one(
+            conn,
+            "INSERT INTO velora.ordering_settings (tenant_id) VALUES (%s) RETURNING id",
+            (t,),
+        )
+        ids["order_capacity_slots"] = _one(
+            conn,
+            "INSERT INTO velora.order_capacity_slots (tenant_id, slot_start, orders_count) "
+            "VALUES (%s, '2026-10-21 09:00:00+00', 1) RETURNING id",
+            (t,),
+        )
         ids["channel_events"] = _one(
             conn,
             "INSERT INTO velora.channel_events (tenant_id, channel_id, event_type) "

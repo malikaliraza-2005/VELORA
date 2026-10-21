@@ -15,7 +15,16 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.api.conftest import Device, Restaurant, join
+from tests.api.conftest import (
+    SAMPLE_CSV,
+    Device,
+    Restaurant,
+    join,
+    publish,
+    publish_menu,
+    sample_menu,
+    save_draft,
+)
 from tests.db.conftest import PgDatabase
 from velora.app import create_app
 from velora.config import Settings
@@ -43,6 +52,22 @@ def _on_target(method: str, suffix: str, **kwargs: object) -> Case:
         return w.owner, w.owner.request(method, f"/api/staff/{w.target.staff_id}{suffix}", **kwargs)
 
     return case
+
+
+def _publish(w: World) -> tuple[Device, httpx2.Response]:
+    return w.owner, publish(w.owner, save_draft(w.owner))
+
+
+def _availability(w: World) -> tuple[Device, httpx2.Response]:
+    publish_menu(w.owner)
+    return w.owner, w.owner.request(
+        "PUT", "/api/menu/availability/ZINGER", json={"available": False}
+    )
+
+
+def _resume(w: World) -> tuple[Device, httpx2.Response]:
+    w.owner.request("POST", "/api/ordering/pause", json={"minutes": 20})
+    return w.owner, w.owner.request("POST", "/api/ordering/resume")
 
 
 CASES: dict[tuple[str, str], tuple[str, Case]] = {
@@ -87,6 +112,39 @@ CASES: dict[tuple[str, str], tuple[str, Case]] = {
         "settings.updated",
         lambda w: (w.owner, w.owner.request("PATCH", "/api/settings", json={"display_name": "N"})),
     ),
+    # P4: menu and ordering controls.
+    ("PUT", "/api/menu/draft"): (
+        "menu.draft_saved",
+        lambda w: (
+            w.owner,
+            w.owner.request(
+                "PUT", "/api/menu/draft", json={"base_revision": 0, "menu": sample_menu()}
+            ),
+        ),
+    ),
+    ("POST", "/api/menu/draft/import"): (
+        "menu.draft_imported",
+        lambda w: (
+            w.owner,
+            w.owner.request(
+                "POST", "/api/menu/draft/import", json={"base_revision": 0, "csv": SAMPLE_CSV}
+            ),
+        ),
+    ),
+    ("POST", "/api/menu/versions/{version_id}/publish"): ("menu.published", _publish),
+    ("PUT", "/api/menu/availability/{sku}"): ("menu.availability_changed", _availability),
+    ("PATCH", "/api/settings/ordering"): (
+        "settings.ordering_updated",
+        lambda w: (
+            w.owner,
+            w.owner.request("PATCH", "/api/settings/ordering", json={"delivery_fee_paisa": 15000}),
+        ),
+    ),
+    ("POST", "/api/ordering/pause"): (
+        "ordering.paused",
+        lambda w: (w.owner, w.owner.request("POST", "/api/ordering/pause", json={"minutes": 20})),
+    ),
+    ("POST", "/api/ordering/resume"): ("ordering.resumed", _resume),
 }
 
 

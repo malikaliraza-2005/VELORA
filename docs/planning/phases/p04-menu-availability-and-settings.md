@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Authorisation** | **NOT AUTHORISED.** Needs the owner's explicit approval. |
+| **Authorisation** | **AUTHORISED** by the owner, 2026-10-21 ("Start P4"). Implementation choices in AD-28. |
 | **Depends on** | P2, P3 |
 | **Blocks** | P6 |
 | **Effort (estimate)** | about 1 week |
@@ -16,6 +16,7 @@
 | AD-03: COD and staff-verified transfers (COD limit, transfer window) | APPROVED |
 | AD-09: own database; inventory is an internal module; Stock Flow excluded | APPROVED |
 | AD-20: order safety (server pricing) | ADOPTED (delegated) |
+| AD-28: P4 implementation choices (versions, founder import, permissions, pricing rules) | ADOPTED (delegated) |
 | Tax values by payment method | **PENDING EXTERNAL** (accountant, blocker B3) |
 | COD limit and transfer window per restaurant | PENDING EXTERNAL (set with each merchant) |
 
@@ -99,4 +100,5 @@
 - **Risks and rollback:** a bad import. Mitigated by draft/publish with version history; rollback means re-publishing the previous version.
 
 ## Open items
-- B3: tax values by payment method.
+- B3: tax values by payment method. Until a rate is set, pricing refuses to quote that payment method.
+- **Deviation:** "form entry by the founder" is the founder's `menu-import` command plus the owner's form endpoint (AD-28). There are no admin web screens in the pilot (AD-27).

@@ -4,9 +4,10 @@ founder onboarding through velora_platform, and `Device`s that each hold their o
 from __future__ import annotations
 
 import asyncio
+import functools
 import sys
 import uuid
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -21,7 +22,7 @@ from pydantic import BaseModel
 from tests.db import conftest as db_fixtures
 from tests.db.conftest import APP_ROLE, PgDatabase
 from velora.admin.onboarding import Onboarding
-from velora.api.deps import CSRF_HEADER, SESSION_COOKIE, ServicesDep, SessionDep
+from velora.api.deps import CSRF_HEADER, SESSION_COOKIE, Services, ServicesDep, SessionDep
 from velora.app import create_app
 from velora.clock import FakeClock
 from velora.config import Settings
@@ -180,3 +181,85 @@ def audit_rows(conn: psycopg.Connection[Any], tenant: TenantId) -> list[tuple[An
         "WHERE tenant_id = %s ORDER BY created_at, action",
         (tenant.value,),
     ).fetchall()
+
+
+# Menus (P4) -------------------------------------------------------------------------------
+
+SAMPLE_CSV = """kind,category,sku,name,price,description,group,min,max
+item,Burgers,ZINGER,Zinger Burger,650,Crispy chicken fillet,,,
+option,,ZINGER,Regular,0,,Size,1,1
+option,,ZINGER,Large,150,,Size,,
+item,Burgers,SMASH,Beef Smash Burger,890,,,,
+item,Drinks,COKE,Coca-Cola 345ml,120,,,,
+"""
+
+
+def sample_menu(zinger_paisa: int = 65000, *, extra_sku: str | None = None) -> dict[str, Any]:
+    """The JSON form of SAMPLE_CSV, optionally with a changed price or an extra item."""
+    burgers: list[dict[str, Any]] = [
+        {
+            "sku": "ZINGER",
+            "name": "Zinger Burger",
+            "description": "Crispy chicken fillet",
+            "price_paisa": zinger_paisa,
+            "groups": [
+                {
+                    "name": "Size",
+                    "min_select": 1,
+                    "max_select": 1,
+                    "options": [
+                        {"name": "Regular", "price_delta_paisa": 0},
+                        {"name": "Large", "price_delta_paisa": 15000},
+                    ],
+                }
+            ],
+        },
+        {"sku": "SMASH", "name": "Beef Smash Burger", "price_paisa": 89000},
+    ]
+    if extra_sku is not None:
+        burgers.append({"sku": extra_sku, "name": f"Item {extra_sku}", "price_paisa": 50000})
+    drinks = [{"sku": "COKE", "name": "Coca-Cola 345ml", "price_paisa": 12000}]
+    return {
+        "categories": [{"name": "Burgers", "items": burgers}, {"name": "Drinks", "items": drinks}]
+    }
+
+
+def save_draft(device: Device, menu: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Save `menu` as the draft, starting from whatever revision the draft is at."""
+    base = device.request("GET", "/api/menu/draft").json()["base_revision"]
+    response = device.request(
+        "PUT", "/api/menu/draft", json={"base_revision": base, "menu": menu or sample_menu()}
+    )
+    assert response.status_code == 200, response.text
+    body: dict[str, Any] = response.json()
+    return body
+
+
+def publish(device: Device, version: dict[str, Any]) -> httpx2.Response:
+    return device.request(
+        "POST",
+        f"/api/menu/versions/{version['id']}/publish",
+        json={"revision": version["revision"]},
+    )
+
+
+def publish_menu(device: Device, menu: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Save `menu` as the draft and publish it. Returns the published version."""
+    response = publish(device, save_draft(device, menu))
+    assert response.status_code == 200, response.text
+    body: dict[str, Any] = response.json()
+    return body
+
+
+def services_of(client: TestClient) -> Services:
+    services = client.app.state.services  # type: ignore[attr-defined]
+    assert isinstance(services, Services)
+    return services
+
+
+def run_async[T](
+    client: TestClient, fn: Callable[..., Awaitable[T]], *args: Any, **kwargs: Any
+) -> T:
+    """Run a service coroutine on the app's event loop (where its connection pool lives)."""
+    assert client.portal is not None
+    return client.portal.call(functools.partial(fn, *args, **kwargs))

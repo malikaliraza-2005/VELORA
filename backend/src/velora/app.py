@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from psycopg_pool import AsyncConnectionPool
 
 from velora import __version__
+from velora.api import menu, ordering
 from velora.api.deps import Services
 from velora.api.routes import router
 from velora.clock import Clock, SystemClock
@@ -23,10 +24,13 @@ from velora.identity.errors import (
     InvalidInputError,
     NotFoundError,
     PinRejectedError,
+    ValidationProblemsError,
 )
 from velora.identity.ratelimit import RateLimiter
 from velora.identity.sessions import SessionService
 from velora.identity.staff import StaffService
+from velora.menu.service import MenuService
+from velora.ordering.service import OrderingService
 
 # Per client address: 10 login attempts per 5 minutes.
 LOGIN_RATE_LIMIT = 10
@@ -47,6 +51,8 @@ def build_services(settings: Settings, database: Database, clock: Clock) -> Serv
         clock=clock,
         sessions=SessionService(database, clock),
         staff=StaffService(database, clock),
+        menu=MenuService(database, clock),
+        ordering=OrderingService(database, clock),
         login_limiter=RateLimiter(LOGIN_RATE_LIMIT, LOGIN_RATE_WINDOW, clock),
     )
 
@@ -77,6 +83,11 @@ def create_app(
     @app.exception_handler(IdentityError)
     async def identity_error(request: Request, exc: IdentityError) -> JSONResponse:
         code = _ERROR_STATUS.get(type(exc), status.HTTP_400_BAD_REQUEST)
+        if isinstance(exc, ValidationProblemsError):
+            return JSONResponse(
+                {"detail": str(exc), "problems": exc.problems},
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            )
         return JSONResponse({"detail": str(exc)}, status_code=code)
 
     @app.get("/healthz")
@@ -84,4 +95,6 @@ def create_app(
         return {"status": "ok"}
 
     app.include_router(router)
+    app.include_router(menu.router)
+    app.include_router(ordering.router)
     return app

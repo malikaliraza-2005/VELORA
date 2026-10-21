@@ -4,7 +4,7 @@
 - **Status:**
   - **P0 is authorised** (2026-10-20). Desk work continues; the **live OpenWA validation is paused**.
   - **P1 is authorised** (2026-10-21).
-  - **P2 and P3 are authorised** (owner, 2026-10-21). **P4–P13 are not authorised.**
+  - **P2, P3 and P4 are authorised** (owner, 2026-10-21). **P5–P13 are not authorised.**
   - Under **AD-25** (owner, 2026-10-21), the provider-neutral parts of P5 and P6–P9 may be built against the `FakeProvider` before the OpenWA Go, each once it is authorised. The OpenWA adapter, real WhatsApp traffic and P10–P13 stay gated by the Go.
 - **Governing decisions:** [`../architecture/architecture-decisions.md`](../architecture/architecture-decisions.md)
 - **Scope:** [`mvp-scope.md`](mvp-scope.md)
@@ -41,8 +41,8 @@
 | [P0](phases/p00-pre-implementation-gates.md) Pre-implementation gates | Produce the evidence the architecture needs before building on OpenWA | **Authorised.** Desk work in progress; live validation **paused** | Test SIMs; volunteer phones; a VPS for the trial; lawyer and accountant engaged | 2–3 calendar weeks. Mostly elapsed time. |
 | [P1](phases/p01-repository-foundation.md) Repository foundation | A clean, secure, testable codebase skeleton | **Authorised (2026-10-21)** | None (can run in parallel with P0) | 3–5 days |
 | [P2](phases/p02-database-and-tenant-isolation.md) Database and tenant isolation | One canonical schema with enforced isolation between businesses | **Authorised; complete** (2026-10-21) | P1 | 1–1.5 weeks |
-| [P3](phases/p03-onboarding-and-staff-identity.md) Onboarding and staff identity | Create businesses safely; authenticated, scoped staff access | **Authorised** (2026-10-21) | P2 | about 1 week |
-| [P4](phases/p04-menu-availability-and-settings.md) Menu, availability and settings | A correct catalogue and day-to-day controls | Not authorised | P2, P3 | about 1 week |
+| [P3](phases/p03-onboarding-and-staff-identity.md) Onboarding and staff identity | Create businesses safely; authenticated, scoped staff access | **Authorised; complete** (2026-10-21) | P2 | about 1 week |
+| [P4](phases/p04-menu-availability-and-settings.md) Menu, availability and settings | A correct catalogue and day-to-day controls | **Authorised** (2026-10-21) | P2, P3 | about 1 week |
 | [P5](phases/p05-whatsapp-provider-and-openwa-adapter.md) WhatsApp provider and OpenWA adapter | Reliable messaging that doesn't depend on any one provider | Not authorised. Provider-neutral tasks may proceed before the Go (AD-25); the OpenWA adapter tasks are **blocked** | **P0 Go (V-01)** for the OpenWA tasks, P2; V-02 and V-04 decided (plus V-05 to V-08 for their tasks) | 1.5–2 weeks |
 | [P6](phases/p06-conversation-workflows.md) Conversation workflows | Customers build a correct cart in WhatsApp safely | Not authorised. May be built against the FakeProvider before the Go (AD-25); real-WhatsApp exit tests stay gated | P4, P5; AI model choice; V-09 | about 2 weeks |
 | [P7](phases/p07-order-lifecycle.md) Order lifecycle | Orders are created exactly once, after validation, and move only through permitted states | Not authorised. May be built against the FakeProvider before the Go (AD-25); real-WhatsApp exit tests stay gated | P6 | 1–1.5 weeks |
