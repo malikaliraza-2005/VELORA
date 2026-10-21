@@ -528,6 +528,53 @@ Stop or pause the pilot on any of these:
     - Retention must also cover `pending_actions.payload`, which holds the address.
 - **Evidence:** PR #9. CI run 39636189526 (702 tests). Migration 0009; tests in `backend/tests/orders/` and `backend/tests/api/test_orders.py`.
 
+### AD-32: P8 implementation choices (payment verification)
+- **Status:** ADOPTED (delegated), awaiting owner review. Built against the `FakeProvider` under AD-25. It implements AD-03 (approved) and AD-23.
+- **The payments ledger (migration 0010):**
+  - `payments` is append-only: `app_rw` has no UPDATE or DELETE, and a trigger refuses changes for everyone.
+  - An entry is `verified` (staff saw the money arrive in the restaurant's own account) or `reversed` (the owner withdrew a verification). A reversal is a new row that names the entry it corrects and why. Each entry can be reversed once.
+  - A verified entry records the amount (the order total), the reference as typed and its comparison key, the confirmer (the PIN holder), the session it was done on (e.g. the kitchen tablet), and whether it was late.
+  - The old statuses `pending`, `customer_claimed`, `rejected`, `refund_pending` and `refunded` are dropped from the ledger. A customer's claim is evidence, not a payment. Refunds are tracked by the order status.
+- **Only staff mark an order paid:**
+  - **The database refuses `paid_staff_verified`** (and `expired` → `refund_pending`) unless the ledger holds a verified, unreversed entry for that order, even for a direct UPDATE.
+  - The paid moves are made only by `velora.payments.service.PaymentService`, after `verify_payment_pin`. The generic staff move refuses them.
+  - A writer-search test (P8-T7) checks that only reviewed code names the paid status, writes the ledger, or writes an order's status, and that every paid move checks a PIN first.
+- **Verification (P8-T4):** `POST /api/orders/{id}/payment/verify` with `{reference, pin, confirmer_id?}`.
+  - The session needs `ORDERS_UPDATE`, and the confirmer needs `PAYMENTS_CONFIRM` and a personal PIN. A shared kitchen device names the confirmer (AD-23).
+  - Only an `awaiting_transfer` transfer order can be verified. These are refused **before** the PIN is checked, so no PIN attempt is used up: a bad reference, a wrong status, or another restaurant's order (404).
+  - **References:** 1 to 64 characters, with at least 4 letters or digits. They are compared by a key of upper-case letters and digits only, so "ft 2026-0001" and "FT20260001" are the same.
+  - **A duplicate reference is refused and flagged.** The reference must be unique among this restaurant's verified, unreversed entries. A duplicate gets 409, naming the order that already has it, and is audited (`payment.duplicate_reference`). Two simultaneous confirmations with one reference are serialised by an advisory lock.
+  - **Amount:** the order total. Staff confirm that the full amount arrived. Partial payments are not modelled.
+  - **Audit:** `payment.verified`, and the order transition names the confirmer.
+- **Late payments (P8-T5):** `POST /api/orders/{id}/payment/late-review` with `decision` = `accept` or `refund`, the reference and a PIN. No other decision exists.
+  - **accept:** the payment is verified (marked late), then `expired` → `paid_staff_verified` → `accepted`. The order does not re-take a capacity place; staff chose to accept it.
+  - **refund:** the payment is verified, because the money did arrive, then `expired` → `refund_pending`, with the reason the customer sees. Staff refund manually from the restaurant's own account, then move `refund_pending` → `cancelled` with a note.
+  - **No time limit for staff.** Customer evidence attaches to an expired order only for 24 hours.
+  - **No `refunded` state** (P7 finding): `refund_pending` → `cancelled`, with the refund note as the reason, stays as is.
+- **Owner controls (P8-T6):** two new owner-only permissions, `PAYMENTS_RECONCILE` and `PAYMENTS_REVERSE`. Managers don't have them; they are the check on everyone else.
+  - **Reconciliation:** `GET /api/payments/reconciliation?day=YYYY-MM-DD` (a Pakistan date, today by default). It lists every transfer verified that day, with the confirmer, whether it was late, the order's current status and any reversal, plus totals (verified, reversed, net).
+  - **Reversal:** `POST /api/payments/{id}/reverse` with the owner's PIN and a reason. It writes a `reversed` entry and is audited (`payment.reversed`).
+    - An order still `paid_staff_verified` goes back to `awaiting_transfer` (a new transfer-only move), and the customer is told that the payment couldn't be matched yet. If its window has passed, the timer then expires it.
+    - An order already accepted or further on keeps its status. The owner decides (cancel, or refund).
+    - After a reversal, the reference may be verified again.
+- **Cash on delivery (P8-T2):**
+  - **Blocklist:** `customers.cod_blocked_at` and `cod_block_reason`. `PUT` / `DELETE /api/customers/{id}/cod-block` needs the new `CUSTOMERS_BLOCK_COD` permission (owner and manager) and is audited. A blocked customer is not offered COD and is told why. A block set after the summary is refused at YES.
+  - **First-order limit (changed from P7):** a customer is on their first order until one of their orders is **completed**. Cancelled, rejected or expired orders don't count. Before this, any earlier order lifted the limit.
+- **Transfer instructions and evidence (P8-T3):**
+  - The restaurant's account details are a setting (`transfer_account_details`, 500 characters, `SETTINGS_EDIT`, audited). **Without them, transfer isn't offered** (the quote refuses `payment_unavailable`).
+  - The details are part of the order confirmation itself (critical, queued with the order). "status" repeats them while a transfer is awaited.
+  - **Evidence:** a screenshot or document, or a message such as "I have paid" (a fixed phrase list, or the AI's `payment_claim` intent), is stored in `payment_evidence` against the customer's open transfer order, and audited. **Nothing else happens.** The customer is told that staff will check and that a screenshot alone doesn't confirm payment.
+    - Evidence is kept even while the chat is handed over or the customer has opted out, but no reply is sent then.
+    - Only the provider's media handle is stored. Fetching the image for staff needs the real adapter (P5-T2) and the screen (P9).
+- **Staff view:** `GET /api/orders/{id}/payment` returns the ledger, the evidence, the customer's COD block, and the allowed actions (`verify` or `late_review`).
+- **Errors:** the API now maps error subclasses to their parent's HTTP status (a duplicate reference is a 409 conflict).
+- **Findings for later phases:**
+  - **P9:** the payment panel (verify with reference and PIN, the confirmer picker on the kitchen tablet, the late review, the evidence list, the owner's report and reversal). Expired orders with evidence aren't in the "active" list, so the dashboard needs a "late payments" view.
+  - **P5-T2:** fetching evidence media for staff.
+  - **P11:** retention must cover `payment_evidence` (it links to the customer's media).
+  - **P13:** each restaurant enters its account details before transfer is offered.
+- **Evidence:** PR #10. CI run 39641355254 (761 tests). Migration 0010; tests in `backend/tests/api/test_payments.py`, `backend/tests/payments/`, `backend/tests/db/test_payments_ledger.py` and `backend/tests/test_paid_writers.py`.
+
 ---
 
 ## 3. VALIDATION-DEPENDENT decisions (decided only after the OpenWA trial)
@@ -674,9 +721,10 @@ A few GB of dumps is probably **$0** on R2 or B2, depending on how long dumps ar
 
 ## 8. Items for owner review
 
-1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-31).** They stand unless you reverse them.
+1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-32).** They stand unless you reverse them.
    - **AD-30 needs a decision:** may Groq's free tier receive real customer messages? That would amend AD-04 (paid tier, no training), and Groq's training terms are unverified.
    - **AD-31 asks you to confirm:** opted-out customers get no order status messages; a customer can cancel only before acceptance and before a verified payment.
+   - **AD-32 asks you to confirm:** the reconciliation report and payment reversal are owner-only (managers can't); a duplicate reference is refused rather than allowed with a warning; the COD first-order limit applies until a customer has a *completed* order; staff confirm the full order total (no partial payments).
 2. **The optional customer order-tracking link (§5).** Not approved.
 3. **The validation-dependent decisions V-01 to V-10.** These come back to you with the trial evidence.
 4. **The cost commitment.** Approve only after vendor checks and V-03.

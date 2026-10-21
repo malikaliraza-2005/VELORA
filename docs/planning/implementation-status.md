@@ -18,11 +18,12 @@
 | **P4** | **Complete (2026-10-21).** Authorised by the owner ("Start P4"). PR #5; all four exit criteria verified in CI. See "P4 task evidence". |
 | **P5** | **Provider-neutral part complete (2026-10-21).** Authorised by the owner ("Start P5"). Built under AD-25 against the `FakeProvider`. **The OpenWA part (T2, the OpenWA parts of T3 and T5, and T6) is not built and stays blocked** until the Go (V-01). See "P5 task evidence". |
 | **P6** | **Provider-neutral part built (2026-10-21).** Authorised by the owner ("Start P6"). Built under AD-25 against the `FakeProvider`, with Groq as the first AI adapter (AD-30). Order creation on YES is P7. **Real customer text must not go to Groq** until the owner decides on AD-04 (see AD-30). See "P6 task evidence". |
-| **P7** | **Provider-neutral part built (2026-10-21).** Authorised by the owner ("Start P7"). Built under AD-25 against the `FakeProvider`. Choices recorded in AD-31. Transfer orders can't be used for real until P8 sends the account details. See "P7 task evidence". |
-| **P8–P13** | **Not started. Not authorised.** |
+| **P7** | **Provider-neutral part built (2026-10-21).** Authorised by the owner ("Start P7"). Built under AD-25 against the `FakeProvider`. Choices recorded in AD-31. See "P7 task evidence". |
+| **P8** | **Provider-neutral part built (2026-10-21).** Authorised by the owner ("Start P8"). Built under AD-25 against the `FakeProvider`. Choices recorded in AD-32. Each restaurant must enter its account details before transfer is offered. See "P8 task evidence". |
+| **P9–P13** | **Not started. Not authorised.** |
 | **Provider-neutral track (AD-25)** | Owner decision 2026-10-21: the provider-neutral parts of P5, and P6–P9, may be built against the `FakeProvider` before the OpenWA Go, each once it is authorised. |
 | **OpenWA adapter, real WhatsApp traffic, P10–P13** | **Blocked** until the live validation is complete and the owner gives a Go (V-01). |
-| **Application code** | P1 skeleton, the P2 database layer, P3 staff identity (login, sessions, roles, PINs, audit, founder onboarding tool), P4 menu and ordering controls (versioned catalogue, CSV import, publish and rollback, availability, pause, capacity, settings, server-side pricing), and the P5 provider-neutral messaging core (provider interface, FakeProvider, durable inbox and outbox, channel state machine, circuit breaker, global pause, worker loop, log redaction). P6 conversations (engine, commands, numbered menus, AI proposals via Groq, cart, checkout, templated summary, handoff). P7 order lifecycle (YES nonce, order transaction, transition table, timers, status messages, recovery hook, staff order API). No real WhatsApp connection. |
+| **Application code** | P1 skeleton, the P2 database layer, P3 staff identity (login, sessions, roles, PINs, audit, founder onboarding tool), P4 menu and ordering controls (versioned catalogue, CSV import, publish and rollback, availability, pause, capacity, settings, server-side pricing), and the P5 provider-neutral messaging core (provider interface, FakeProvider, durable inbox and outbox, channel state machine, circuit breaker, global pause, worker loop, log redaction). P6 conversations (engine, commands, numbered menus, AI proposals via Groq, cart, checkout, templated summary, handoff). P7 order lifecycle (YES nonce, order transaction, transition table, timers, status messages, recovery hook, staff order API). P8 payment verification (append-only ledger, reference + PIN verification, duplicate references, late-payment review, owner reconciliation and reversal, COD blocklist, transfer details, customer evidence). No real WhatsApp connection. |
 | **Purchases / subscriptions** | None. |
 
 **What the owner can provide right now:**
@@ -48,9 +49,9 @@ A reduced live-trial variant that fits these constraints is **proposed, not appr
 | [P4 Menu, availability and settings](phases/p04-menu-availability-and-settings.md) | **Complete** (2026-10-21) | — (tax values wait for the accountant, B3; quotes are refused until set) | PR #5; CI run 39598901486 (491 tests); see "P4 task evidence" | Owner: review AD-28; authorise the next phase when ready |
 | [P5 Provider abstraction and OpenWA adapter](phases/p05-whatsapp-provider-and-openwa-adapter.md) | **Provider-neutral part complete** (2026-10-21). **OpenWA part blocked** | OpenWA part: **live validation + Go (V-01)**; V-02, V-04, V-05, V-06, V-07, V-08 | PR #6; CI run 39604566511 (580 tests). See "P5 task evidence" | Owner: review AD-29 |
 | [P6 Conversation workflows](phases/p06-conversation-workflows.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). Split limit provisional: V-09. AI accuracy on real data: P0-F6. Groq for real customers: owner decision (AD-30) | PR #7; CI run 39613089570 (652 tests). See "P6 task evidence" | Owner: review AD-30 and decide on Groq vs AD-04; confirm the 90% target; authorise P7 when ready |
-| [P7 Order lifecycle](phases/p07-order-lifecycle.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). The P11 drill also exercises the recovery hook | PR #9; CI run 39636189526 (702 tests). See "P7 task evidence" | Owner: review AD-31; authorise P8 when ready |
-| [P8 Payment verification](phases/p08-payment-verification.md) | Not started — not authorised | P7 (built), P3 | — | — |
-| [P9 Staff dashboard](phases/p09-staff-dashboard.md) | Not started — blocked (depends on P5–P8) | P3–P8 | — | — |
+| [P7 Order lifecycle](phases/p07-order-lifecycle.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). The P11 drill also exercises the recovery hook | PR #9; CI run 39636189526 (702 tests). See "P7 task evidence" | Owner: review AD-31 |
+| [P8 Payment verification](phases/p08-payment-verification.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). Evidence media for staff: P5-T2 | PR #10; CI run 39641355254 (761 tests). See "P8 task evidence" | Owner: review AD-32; authorise P9 when ready |
+| [P9 Staff dashboard](phases/p09-staff-dashboard.md) | Not started — not authorised | P3–P8 (built) | — | — |
 | [P10 Monitoring](phases/p10-monitoring-and-alerting.md) | Not started — blocked | P5–P9 | — | — |
 | [P11 Backups and recovery](phases/p11-backups-recovery-and-runbooks.md) | Not started — blocked | P2, P5, P7; V-07 | — | — |
 | [P12 Deployment and staging](phases/p12-deployment-and-staging.md) | Not started — blocked | P10, P11; V-03 | — | — |
@@ -261,6 +262,36 @@ Only the provider-neutral track that AD-25 allows was built. Implementation choi
 - **P9:** show `possible_duplicate`, the allowed next moves and the history.
 - **P11:** call `expire_pre_outage` and extend `payment_due_at` by the outage length; retention must cover `pending_actions.payload`.
 
+## P8 task evidence (2026-10-21)
+
+Only the provider-neutral track that AD-25 allows was built. Implementation choices are recorded as **ADOPTED (delegated)** in decision AD-32, for owner review.
+
+| Task | Status | Evidence (tests in `backend/tests/`) |
+|---|---|---|
+| P8-T1 Payments ledger | Done | `db/test_payments_ledger.py`: **UPDATE and DELETE on ledger rows are refused for `app_rw`**, and by a trigger for everyone; a correction is a new `reversed` row, once per entry, naming what it corrects and why. `db/test_isolation.py` lists `payments` and `payment_evidence` as append-only and tenant-isolated |
+| P8-T2 COD controls | Done | `payments/test_customer_side.py`: **a first order over the limit is refused with a clear message** (when COD is offered, and again at YES); **a blocklisted customer can't choose COD** (and a block set after the summary is refused at YES); a customer is on their first order until one is completed. `api/test_payments.py`: managers block and unblock, the kitchen can't, both audited |
+| P8-T3 Transfer instructions and screenshots | Done (media fetching is P5-T2) | `payments/test_customer_side.py`: the confirmation and "status" carry the account details; without them transfer isn't offered; **a screenshot alone never changes payment status** (orders, ledger and history unchanged; the evidence is kept for staff); **"I have paid" never changes payment status**, typed or read by the AI; evidence is kept silently during a handoff |
+| P8-T4 Staff verification | Done | `api/test_payments.py`: reference + PIN sets `paid_staff_verified`, writes the ledger and audits the confirmer; **a confirmation without a PIN (or with a wrong one), or from another tenant, is rejected**; a kitchen device names a person; cash orders and the generic move can't be marked paid; **a duplicate reference is flagged** (409 naming the other order, audited), per tenant; two simultaneous confirmations with one reference verify one order |
+| P8-T5 Expiry and late payments | Done | `payments/test_customer_side.py`: **an expired transfer moves to `expired`, not paid** (no ledger entry), and late evidence still reaches staff for 24 hours. `api/test_payments.py`: **the late-payment review offers only "accept" or "refund"** (anything else is 422; ordinary verification and generic moves are refused); accept verifies then accepts; refund records the payment and marks `refund_pending` |
+| P8-T6 Reconciliation and reversal | Done | `api/test_payments.py`: **the report lists every staff-verified transfer of the day** (by Pakistan date, with confirmer, late flag and totals); **only the owner sees it or reverses**; a reversal needs the owner's PIN and a reason, is audited, happens once, returns a still-unaccepted order to `awaiting_transfer` and frees the reference; after acceptance the order keeps its status |
+| P8-T7 Paid-writer guard | Done | `test_paid_writers.py`: **only reviewed code names `paid_staff_verified`, writes the ledger or writes an order's status**, and every paid move checks a PIN first; a self-test proves a planted writer is found. `db/test_payments_ledger.py`: **the database refuses `paid_staff_verified` without a verified, unreversed ledger entry**, even for a direct UPDATE |
+
+**Verified in CI:** [run 39641355254](https://github.com/malikaliraza-2005/VELORA/actions/runs/39641355254) (PR #10). 761 tests passed against PostgreSQL 17, and the secret scan was clean.
+
+**P8 exit criteria** (all provider-neutral):
+- **Screenshot alone never changes status:** met.
+- **"I have paid" never changes status:** met.
+- **A confirmation without a PIN, or from another tenant, is rejected:** met.
+- **A duplicate reference is flagged:** met.
+- **An expired transfer becomes `expired`, not paid:** met.
+- **Real-WhatsApp exit tests:** gated by the Go (V-01).
+
+**Findings for later phases:** see AD-32. In short:
+- **P9:** the payment panel (verify, confirmer picker on the tablet, late review, evidence, the owner's report and reversal) and a "late payments" view, because expired orders aren't in the active list.
+- **P5-T2:** fetching evidence media for staff.
+- **P11:** retention must cover `payment_evidence`.
+- **P13:** each restaurant enters its account details before transfer is offered.
+
 ## Resuming the live test
 
 The owner provides:
@@ -285,13 +316,13 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 | B5 | Vendor prices not fully verified (see price sheet) | Infrastructure commitment (P12) | Engineering |
 | B6 | AI model not selected (no real dataset). Groq gpt-oss-20b is the built adapter (AD-30), but the selection needs the P0-F6 evaluation | Pilot use of AI | Engineering |
 | B7 | ~~Delivery channel for staff magic links undecided~~ **Resolved for the pilot:** manual delivery (AD-27, ADOPTED (delegated)). Email is a later option | — | Engineering |
-| B8 | Owner authorisation for P8–P13 (P1 to P7 authorised 2026-10-21; P5 to P7 for their provider-neutral parts only) | P8 onwards | Owner |
+| B8 | Owner authorisation for P9–P13 (P1 to P8 authorised 2026-10-21; P5 to P8 for their provider-neutral parts only) | P9 onwards | Owner |
 | B10 | Groq's free tier vs AD-04 (paid tier, no training on our data). Groq's training terms are unverified | Sending real customer messages to the AI | Owner |
 | B9 | Reduced trial variant and trial tooling (P0-E1) not approved | Resuming the live test | Owner |
 
 ## Decisions awaiting the owner
 
-- Review the **ADOPTED (delegated)** decisions AD-11 to AD-24 and AD-26 to AD-31 ([decisions §8](../architecture/architecture-decisions.md#8-items-for-owner-review)).
+- Review the **ADOPTED (delegated)** decisions AD-11 to AD-24 and AD-26 to AD-32 ([decisions §8](../architecture/architecture-decisions.md#8-items-for-owner-review)).
 - Approve or reject the **reduced live-trial variant** ([validation plan §9](openwa-validation-plan.md)).
 - **Go/No-Go and V-01 to V-10:** after the live trial.
 - **Infrastructure cost commitment:** after vendor checks.
