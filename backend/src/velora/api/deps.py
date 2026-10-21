@@ -17,6 +17,7 @@ from fastapi import Depends, HTTPException, Request, status
 
 from velora.clock import Clock
 from velora.config import Settings
+from velora.conversation.service import ConversationService
 from velora.identity.permissions import Permission
 from velora.identity.ratelimit import RateLimiter
 from velora.identity.sessions import SessionService, StaffSession
@@ -38,6 +39,7 @@ class Services:
     staff: StaffService
     menu: MenuService
     ordering: OrderingService
+    conversations: ConversationService
     login_limiter: RateLimiter
 
 

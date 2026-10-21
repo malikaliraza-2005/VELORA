@@ -94,7 +94,7 @@ def price_cart(
     if payment_method == "transfer" and not settings.transfer_enabled:
         raise QuoteRejected("payment_unavailable", "bank or wallet transfer isn't available")
 
-    quoted = tuple(_price_line(live, line) for line in lines)
+    quoted = quote_lines(live, lines)
     subtotal = sum(q.line_total_paisa for q in quoted)
     fee = 0
     if fulfilment == "delivery":
@@ -121,7 +121,13 @@ def price_cart(
     )
 
 
-def _price_line(live: LiveMenu, line: CartLine) -> QuotedLine:
+def quote_lines(live: LiveMenu, lines: list[CartLine]) -> tuple[QuotedLine, ...]:
+    """Price lines against the live menu without fulfilment or payment: the cart view and an
+    AI proposal (P6) show these. Raises QuoteRejected for the first line that can't be priced."""
+    return tuple(price_line(live, line) for line in lines)
+
+
+def price_line(live: LiveMenu, line: CartLine) -> QuotedLine:
     sku = line.sku.strip().upper()
     item = live.item(sku)
     if item is None:

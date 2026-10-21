@@ -3,8 +3,9 @@
 Needs VELORA_DATABASE_URL (app_rw) and VELORA_DISPATCHER_DATABASE_URL (velora_dispatcher).
 This is a composition root: it may import provider adapters through the registry.
 
-Inbound customer messages stay stored in the inbox until P6 registers their handler; only
-delivery receipts are processed for now.
+Inbound customer messages go to the conversation engine (P6), delivery receipts to the
+outbox. The AI proposer is optional (`VELORA_GROQ_API_KEY`); without it customers use the
+numbered menu.
 """
 
 from __future__ import annotations
@@ -16,8 +17,10 @@ import sys
 
 from psycopg_pool import AsyncConnectionPool
 
+from velora.ai.registry import build_proposer
 from velora.clock import SystemClock
 from velora.config import Settings
+from velora.conversation.engine import ConversationEngine
 from velora.db import Database
 from velora.messaging.channels import ChannelMonitor
 from velora.messaging.dispatch import Dispatcher
@@ -36,9 +39,13 @@ async def _run(settings: Settings, app_url: str, dispatcher_url: str) -> None:
         AsyncConnectionPool(dispatcher_url, open=False, min_size=1, max_size=2) as d_pool,
     ):
         db = Database(app_pool)
+        engine = ConversationEngine(
+            clock, providers, build_proposer(settings), ai_timeout=settings.ai_timeout_seconds
+        )
+        handlers = {"message": engine.handle, "delivery_status": apply_delivery_status}
         worker = Worker(
             Dispatcher(d_pool, clock),
-            InboxProcessor(db, clock, {"delivery_status": apply_delivery_status}),
+            InboxProcessor(db, clock, handlers),
             OutboxSender(db, providers, clock),
             ChannelMonitor(db, providers, clock),
             clock,

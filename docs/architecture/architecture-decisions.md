@@ -411,6 +411,64 @@ Stop or pause the pilot on any of these:
 - **Provider boundary:** a static import-graph check in CI. Only `velora.messaging.registry` and `velora.workers.__main__` may reach `velora.messaging.providers`. `fake` is registered only in development and test, and `meta_cloud` is never registered.
 - **Evidence:** PR #6. CI run 39604566511 (580 tests).
 
+### AD-30: P6 implementation choices (conversation workflows) and Groq as the AI adapter
+- **Status:** ADOPTED (delegated), awaiting owner review. **One part needs an owner decision:** whether Groq's *free* tier may receive real customer messages (see "Groq and AD-04").
+- **Engine:**
+  - The conversation engine is the inbox handler for `message` events. The state change, the opt-out and the queued replies commit with the event, exactly once.
+  - Each message takes a transaction-scoped advisory lock on (channel, customer) and locks the conversation row. The customer upsert also locks the customer row.
+  - States: `idle`, `browsing`, `category`, `choosing`, `proposal`, `fulfilment`, `address`, `delivery_note`, `pickup_time`, `payment`, `summary`, `handoff`. A CHECK constraint guards them (migration 0008).
+  - The cart in `conversations.context` holds SKUs, quantities and option names only, never amounts. Every amount shown is re-priced at that moment.
+- **Commands** (case-insensitive): `0` / agent / insaan / staff (handoff), CANCEL, status, MENU (or a short greeting), CART, CHECKOUT, YES, `remove N`.
+  - **Change from the Appendix A draft:** `0` always means staff, so "0. Back to menu" became MENU. Cart and checkout are words (CART, CHECKOUT), not 8 and 9, so they can't collide with category numbers.
+- **STOP (AD-24):** only a message that is exactly "STOP" (any case, surrounding spaces ignored) opts out. It is honoured in every state, including handoff.
+  - Conversational replies still queued for that customer are cancelled.
+  - While opted out, only START is answered. START replies with the disclosure and the menu.
+  - CANCEL clears the cart and never opts out.
+- **Disclosure:** prefixed to the first reply of a conversation (no outbound message yet), and again after START.
+- **Handoff:** triggered by 0 / agent / insaan / staff / "insaan se baat…", or by two messages in a row the bot can't understand. Media and voice notes don't count as not understood.
+  - While handed over, the bot sends nothing except the STOP confirmation.
+  - Resume bot needs `CHATS_HANDLE` and is audited (`conversation.bot_resumed`). It keeps the cart and drops any half-done checkout or proposal.
+  - The service and API exist (`GET /api/conversations/handoffs`, `POST /api/conversations/{id}/resume`). The inbox screen is P9.
+- **Menus:**
+  - Numbered text for every provider. The provider interface has no list or button messages.
+  - A reply is split on line breaks at `min(capabilities().max_text_length, 1000)` characters. **The 1000 is provisional until V-09.**
+- **Gate:** checked when the first item goes into an empty cart, and again at checkout. A closed gate gives the A4 wording.
+- **Checkout:**
+  - fulfilment (asked only if both delivery and takeaway are on);
+  - for delivery: an address of at least 10 characters or a location pin, then an optional note;
+  - for takeaway: up to five pickup slots from the first whole 5 minutes after the lead time, or a typed time ("8:30 pm", "9 baje", "30 min"), checked with `check_pickup_time`;
+  - payment: only methods `price_cart` can quote (an unset tax rate removes that method, B3) and that pass the COD first-order limit;
+  - then the templated summary.
+  - The quote (menu version, total, expiry in 10 minutes) is stored for P7.
+  - YES re-prices first. An expired or changed summary is shown again (A7). Otherwise the customer is told ordering isn't switched on yet: **order creation is P7.**
+- **AI proposals (P6-T4):**
+  - Behind a `Proposer` interface (`velora.ai.proposer`). Only `velora.ai.registry`, `velora.ai.evaluate` and the worker entry point may import the adapter; a static check enforces this.
+  - The model sees only the minimised text (long digit runs, emails and links masked; at most 500 characters) and the offerable menu's SKUs, names, categories and option names. It never sees prices, tenant, channel, customer, phone or address, and it has no tools.
+  - Output is parsed strictly: intent from a fixed set, at most 10 lines, quantity 1–50, everything else dropped.
+  - Each line is resolved against the published menu and availability. Unknown SKUs are dropped and unavailable ones reported. A line with a missing or invented option gets a fixed note with the database name only, so model text never reaches the customer.
+  - The customer must reply YES to add a proposal to the cart.
+  - A timeout (`VELORA_AI_TIMEOUT_SECONDS`, default 8) or any error shows the numbered menu.
+  - Switchable per tenant (`ordering_settings.ai_enabled`, default on). With no `VELORA_GROQ_API_KEY`, there is no AI at all.
+  - *Trade-off:* the AI call runs inside the inbox transaction, holding the chat's lock for up to the timeout. That is acceptable at pilot volume.
+- **Groq and AD-04** (owner asked on 2026-10-21 to "consider GROQ as free llm"):
+  - Groq is the first adapter. It uses the OpenAI-compatible chat completions API, JSON mode, temperature 0, default model `openai/gpt-oss-20b` (`VELORA_AI_MODEL`), and reasoning effort low for gpt-oss.
+  - It makes HTTP calls through the standard library, so there is no new dependency.
+  - **What we checked (2026-10-21):** Groq's "Your data" page says inference inputs and outputs are not retained by default, except reliability and abuse logs kept up to 30 days. Zero Data Retention can be switched on by any customer in Data Controls, and the page draws no free/paid distinction. **The page does not say whether Groq trains on customer data, and Groq's terms were not reviewed.** The Developer-plan base limit for gpt-oss-20b is 30 requests/min, 1K/day and 8K tokens/min. Free-plan limits are shown only in the account console and were not verified.
+  - **Conflict:** AD-04 (APPROVED) requires a *paid* tier whose terms exclude training. The free tier fails the "paid" part, and the training part is unverified for any tier.
+  - **Adopted for now:** the free tier may be used for development and for the offline evaluation with synthetic data (the A15 set). **Real customer messages must not go to Groq** until the owner amends AD-04 or a tier with verified no-training terms and ZDR is used.
+  - Before the pilot: turn on ZDR, verify the training terms, and check that the free limits cover the pilot (1K requests/day is roughly 1K free-text messages).
+- **Offline evaluation (P6-T7):** `python -m velora.ai.evaluate evaluation/synthetic-a15.json`. It scores intent plus exact lines, regardless of order or case. The 90% target is an estimate, not a CI gate, and the real P0-F6 dataset is still needed.
+- **Findings for later phases:**
+  - **P5-T2:** the canonical `InboundMessage` has no location coordinates. A pin is stored as "📍 Shared location" plus its provider message id.
+  - **P7:**
+    - Replace the "not switched on yet" reply with the nonce and the order transaction.
+    - Compare against `context.quote` (menu version and total).
+    - Implement CANCEL for placed orders.
+    - Decide whether order status updates go to opted-out customers.
+  - **P9:** show the handoff inbox and Resume bot, and the `ai_enabled` switch (already accepted by `PATCH /api/settings/ordering`).
+  - **P11:** retention must also cover `conversations.context`, which holds delivery addresses.
+- **Evidence:** PR #7. CI run 39613089570 (652 tests). Migration 0008; tests in `backend/tests/conversation/`.
+
 ---
 
 ## 3. VALIDATION-DEPENDENT decisions (decided only after the OpenWA trial)
@@ -557,7 +615,8 @@ A few GB of dumps is probably **$0** on R2 or B2, depending on how long dumps ar
 
 ## 8. Items for owner review
 
-1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-29).** They stand unless you reverse them.
+1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-30).** They stand unless you reverse them.
+   - **AD-30 needs a decision:** may Groq's free tier receive real customer messages? That would amend AD-04 (paid tier, no training), and Groq's training terms are unverified.
 2. **The optional customer order-tracking link (§5).** Not approved.
 3. **The validation-dependent decisions V-01 to V-10.** These come back to you with the trial evidence.
 4. **The cost commitment.** Approve only after vendor checks and V-03.
@@ -584,7 +643,7 @@ These come from the OpenWA desk review ([validation plan §10](../planning/openw
 | PC-7 | AD-24 data minimisation; retention | Set OpenWA's `MESSAGE_RETENTION_DAYS` to a finite value (suggested 30, final value after the legal brief) and filter group, status and broadcast events at the webhook. **OpenWA's own database stays in security scope**, because it holds message content. | Default is to keep everything forever (§10.2) | PROPOSED; legal input |
 | PC-8 | V-07 (session backups) | Confirms the default: **don't back up the OpenWA volume off-site** (plaintext auth). Accept re-linking every session after a host loss, and document it in the P11 runbook. | §10.3 | PROPOSED |
 | PC-9 | AD-19 (hosting) | Choose a VPS and database **in the same region**, preferably Mumbai/Bangalore or Singapore. Hetzner's cheap plans are EU-only and were unavailable on 2026-10-21. | §6.1, §6.7 | PROPOSED; latency not measured |
-| PC-10 | AD-04 (AI model) | Candidates for the P0-E5 evaluation: Claude Haiku 5.5, gpt-4o-mini, Gemini 3.1 Flash-Lite, and Groq gpt-oss (training policy to verify). Drop Groq Llama 3.3 70B, which is now enterprise-only. | §6.5 | PROPOSED |
+| PC-10 | AD-04 (AI model) | Candidates for the P0-E5 evaluation: Claude Haiku 5.5, gpt-4o-mini, Gemini 3.1 Flash-Lite, and Groq gpt-oss (training policy to verify). Drop Groq Llama 3.3 70B, which is now enterprise-only. | §6.5 | PROPOSED. Groq gpt-oss is the first adapter built (AD-30); the selection still needs the evaluation |
 | PC-11 | P10 (monitoring) | Budget for a paid uptime-monitoring tier (e.g. UptimeRobot Solo, $10/mo). The free tier is described as for hobby/non-profit use. | §6.4 | PROPOSED |
 | PC-12 | Validation plan | Add test T3.9 (passkey linking block, #560), the reconciliation, ID and send-idempotency tests, and the trial configuration baseline. | Validation plan §10.6 | PROPOSED |
 | PC-13 | Risk register | Record #560 (a passkey can block all device linking, no workaround) and #830 (first message to a new contact can silently fail) as **pilot risks**. #560 could also block re-linking after a disconnect. | §10.4–10.5 | PROPOSED |

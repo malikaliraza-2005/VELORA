@@ -34,6 +34,7 @@ class SettingsOut(BaseModel):
     cod_first_order_limit_paisa: int | None
     transfer_window_minutes: int
     max_orders_per_slot: int | None
+    ai_enabled: bool
 
 
 class SettingsChange(BaseModel):
@@ -55,6 +56,7 @@ class SettingsChange(BaseModel):
     cod_first_order_limit_paisa: int | None = None
     transfer_window_minutes: int | None = None
     max_orders_per_slot: int | None = None
+    ai_enabled: bool | None = None
 
 
 class PauseRequest(BaseModel):
