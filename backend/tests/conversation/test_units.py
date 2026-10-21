@@ -9,7 +9,13 @@ from pathlib import Path
 import pytest
 
 from velora.ai.evaluate import TARGET, evaluate, is_correct, load_dataset, render_report
-from velora.ai.proposer import Proposal, ProposalRequest, ProposedLine, ProposerError
+from velora.ai.proposer import (
+    Proposal,
+    ProposalRequest,
+    ProposedLine,
+    ProposerError,
+    RateLimitedError,
+)
 from velora.config import Settings
 from velora.conversation.pktime import PKT, format_time, parse_pickup
 from velora.menu.model import validate_menu
@@ -124,3 +130,31 @@ def test_is_correct_needs_the_intent_and_the_exact_lines() -> None:
     assert not is_correct(first, Proposal("menu"))
     injection = next(c for c in cases if c.text.startswith("ignore previous"))
     assert is_correct(injection, Proposal("unknown")) and is_correct(injection, Proposal("menu"))
+
+
+class Throttled:
+    """Rate-limited for the first `refusals` calls, then answers like the oracle."""
+
+    def __init__(self, path: Path, refusals: int) -> None:
+        self.oracle = Oracle(path)
+        self.refusals = refusals
+        self.calls = 0
+
+    async def propose(self, request: ProposalRequest) -> Proposal:
+        self.calls += 1
+        if self.calls <= self.refusals:
+            raise RateLimitedError("HTTP 429", retry_after=0)
+        return await self.oracle.propose(request)
+
+
+def test_the_harness_waits_and_retries_when_rate_limited() -> None:
+    menu, cases = load_dataset(DATASET)
+    proposer = Throttled(DATASET, refusals=2)
+    report = asyncio.run(evaluate(proposer, menu, cases[:3], timeout=1, rate_wait=0))
+    assert report.correct == 3
+    assert proposer.calls == 5
+    # Retries are bounded: a provider that always refuses gives a miss, not a hang.
+    always = Throttled(DATASET, refusals=1000)
+    report = asyncio.run(evaluate(always, menu, cases[:1], timeout=1, retries=2, rate_wait=0))
+    assert report.correct == 0 and always.calls == 3
+    assert "RateLimitedError" in render_report(report)
