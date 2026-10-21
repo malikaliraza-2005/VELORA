@@ -44,7 +44,7 @@ A reduced live-trial variant that fits these constraints is **proposed, not appr
 | [P2 Database and tenant isolation](phases/p02-database-and-tenant-isolation.md) | **Complete** (2026-10-21) | — | PR #3; CI runs 39590467933 (PR) and 39590889951 (main); 187 tests | — |
 | [P3 Onboarding and staff identity](phases/p03-onboarding-and-staff-identity.md) | **Complete** (2026-10-21) | — (B7 resolved for the pilot: manual delivery, AD-27) | PR #4; CI run 39594079256 (315 tests); see "P3 task evidence" | Owner: review AD-27 |
 | [P4 Menu, availability and settings](phases/p04-menu-availability-and-settings.md) | **Complete** (2026-10-21) | — (tax values wait for the accountant, B3; quotes are refused until set) | PR #5; CI run 39598901486 (491 tests); see "P4 task evidence" | Owner: review AD-28; authorise the next phase when ready |
-| [P5 Provider abstraction and OpenWA adapter](phases/p05-whatsapp-provider-and-openwa-adapter.md) | **Provider-neutral part complete** (2026-10-21). **OpenWA part blocked** | OpenWA part: **live validation + Go (V-01)**; V-02, V-04, V-05, V-06, V-07, V-08 | Branch `feature/p5-provider-neutral`; 580 tests locally; CI pending. See "P5 task evidence" | Owner: review AD-29; authorise P6 when ready |
+| [P5 Provider abstraction and OpenWA adapter](phases/p05-whatsapp-provider-and-openwa-adapter.md) | **Provider-neutral part complete** (2026-10-21). **OpenWA part blocked** | OpenWA part: **live validation + Go (V-01)**; V-02, V-04, V-05, V-06, V-07, V-08 | PR #6; CI run 39604566511 (580 tests). See "P5 task evidence" | Owner: review AD-29; authorise P6 when ready |
 | [P6 Conversation workflows](phases/p06-conversation-workflows.md) | Not started — not authorised. Can be built against the FakeProvider (AD-25) | Owner authorisation; AI model choice (B6); V-09 | — | — |
 | [P7 Order lifecycle](phases/p07-order-lifecycle.md) | Not started — blocked (depends on P6) | P6 | — | — |
 | [P8 Payment verification](phases/p08-payment-verification.md) | Not started — blocked (depends on P7) | P7, P3 | — | — |
@@ -178,7 +178,7 @@ Only the provider-neutral track that AD-25 allows was built. Implementation choi
 - **Signatures:** met for the core (nothing is stored). The 4xx response belongs to the OpenWA endpoint, which is **blocked**.
 - **Contract tests against real OpenWA payloads recorded in P0:** **not met; blocked** (V-01, and the paused live trial).
 
-Local run: 580 tests passed against PostgreSQL 17; ruff, format and mypy clean. **CI evidence pending.**
+**Verified in CI:** [run 39604566511](https://github.com/malikaliraza-2005/VELORA/actions/runs/39604566511) (PR #6). 580 tests passed against PostgreSQL 17, and the secret scan was clean.
 
 **Findings for later phases:**
 - **P5-T2 (after the Go):** add `OpenWAAdapter` to `CONTRACT_PROVIDERS` with payloads recorded in P0, register it in `velora.messaging.registry`, and add the webhook endpoint. The endpoint must call `parse_webhook`, then `Ingress.receive`, and return 2xx only after `receive` returns. It must map `InvalidWebhookError` and `SessionMismatchError` to 4xx, `UnknownChannelError` to 404, and anything else to 5xx.
@@ -237,7 +237,7 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 
 | Date | Change |
 |---|---|
-| 2026-10-21 | Owner authorised **P5** ("Start P5"). Built only the provider-neutral track (AD-25): T1, T7 and T8, plus the cores of T3, T4 and T5 (migration 0007; 580 tests locally). The OpenWA parts (T2, T6, the OpenWA endpoint and detection) stay blocked by V-01. Decision AD-29 (P5 choices, including the `velora_dispatcher` role that resolves the AD-26 finding) recorded as ADOPTED (delegated). |
+| 2026-10-21 | Owner authorised **P5** ("Start P5"). Built only the provider-neutral track (AD-25): T1, T7 and T8, plus the cores of T3, T4 and T5 (PR #6, CI run 39604566511; migration 0007; 580 tests). The OpenWA parts (T2, T6, the OpenWA endpoint and detection) stay blocked by V-01. Decision AD-29 (P5 choices, including the `velora_dispatcher` role that resolves the AD-26 finding) recorded as ADOPTED (delegated). |
 | 2026-10-21 | Owner authorised **P4** ("Start P4"). P4 implemented and verified in CI (PR #5, run 39598901486; migration 0006; 491 tests). Decision AD-28 (P4 choices) recorded as ADOPTED (delegated). |
 | 2026-10-21 | Owner authorised **P3** ("Start P3"). P3 implemented and verified in CI (PR #4, run 39594079256), and B7 resolved for the pilot (manual delivery). Decisions AD-26 (P2 choices) and AD-27 (P3 choices) recorded as ADOPTED (delegated). |
 | 2026-10-21 | **P2 complete.** Owner authorised P2 ("Start P2"); merged in PR #3, CI green (runs 39590467933 and 39590889951). |

@@ -409,6 +409,7 @@ Stop or pause the pilot on any of these:
   - It also masks phone numbers and WhatsApp ids down to their last three digits.
   - Error text stored in the queues is redacted and capped at 200 characters.
 - **Provider boundary:** a static import-graph check in CI. Only `velora.messaging.registry` and `velora.workers.__main__` may reach `velora.messaging.providers`. `fake` is registered only in development and test, and `meta_cloud` is never registered.
+- **Evidence:** PR #6. CI run 39604566511 (580 tests).
 
 ---
 
