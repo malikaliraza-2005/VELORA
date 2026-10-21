@@ -48,7 +48,7 @@ A reduced live-trial variant that fits these constraints is **proposed, not appr
 | [P4 Menu, availability and settings](phases/p04-menu-availability-and-settings.md) | **Complete** (2026-10-21) | — (tax values wait for the accountant, B3; quotes are refused until set) | PR #5; CI run 39598901486 (491 tests); see "P4 task evidence" | Owner: review AD-28; authorise the next phase when ready |
 | [P5 Provider abstraction and OpenWA adapter](phases/p05-whatsapp-provider-and-openwa-adapter.md) | **Provider-neutral part complete** (2026-10-21). **OpenWA part blocked** | OpenWA part: **live validation + Go (V-01)**; V-02, V-04, V-05, V-06, V-07, V-08 | PR #6; CI run 39604566511 (580 tests). See "P5 task evidence" | Owner: review AD-29 |
 | [P6 Conversation workflows](phases/p06-conversation-workflows.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). Split limit provisional: V-09. AI accuracy on real data: P0-F6. Groq for real customers: owner decision (AD-30) | PR #7; CI run 39613089570 (652 tests). See "P6 task evidence" | Owner: review AD-30 and decide on Groq vs AD-04; confirm the 90% target; authorise P7 when ready |
-| [P7 Order lifecycle](phases/p07-order-lifecycle.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). The P11 drill also exercises the recovery hook | PR (P7); see "P7 task evidence" | Owner: review AD-31; authorise P8 when ready |
+| [P7 Order lifecycle](phases/p07-order-lifecycle.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). The P11 drill also exercises the recovery hook | PR #9; CI run 39636189526 (702 tests). See "P7 task evidence" | Owner: review AD-31; authorise P8 when ready |
 | [P8 Payment verification](phases/p08-payment-verification.md) | Not started — not authorised | P7 (built), P3 | — | — |
 | [P9 Staff dashboard](phases/p09-staff-dashboard.md) | Not started — blocked (depends on P5–P8) | P3–P8 | — | — |
 | [P10 Monitoring](phases/p10-monitoring-and-alerting.md) | Not started — blocked | P5–P9 | — | — |
@@ -242,7 +242,7 @@ Only the provider-neutral track that AD-25 allows was built. Implementation choi
 | P7-T6 Customer status notifications | Done | `orders/test_notifications.py`: **with every send failing, every transition still succeeds** and the order ends `completed`; opted-out customers get no status messages |
 | P7-T7 Recovery hook | Done (P11 calls it) | `orders/test_recovery.py`: **pending actions created before an outage are expired in recovery**; the customer is asked to confirm again, and the old YES places nothing; a later summary is untouched; an already-expired one is voided silently |
 
-**Verified in CI:** _pending; filled in once the PR's CI run is green._
+**Verified in CI:** [run 39636189526](https://github.com/malikaliraza-2005/VELORA/actions/runs/39636189526) (PR #9). 702 tests passed against PostgreSQL 17, and the secret scan was clean.
 
 **P7 exit criteria** (the provider-neutral ones):
 - **Double YES:** met. Exactly one order in 100 of 100 runs.

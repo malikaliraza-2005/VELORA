@@ -526,7 +526,7 @@ Stop or pause the pilot on any of these:
   - **P11:**
     - Recovery mode calls `expire_pre_outage`, and extends `payment_due_at` by the outage length (step 5).
     - Retention must also cover `pending_actions.payload`, which holds the address.
-- **Evidence:** PR (P7). Migration 0009; tests in `backend/tests/orders/` and `backend/tests/api/test_orders.py`.
+- **Evidence:** PR #9. CI run 39636189526 (702 tests). Migration 0009; tests in `backend/tests/orders/` and `backend/tests/api/test_orders.py`.
 
 ---
 
