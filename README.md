@@ -39,6 +39,23 @@ The full list of checks is in [`backend/README.md`](backend/README.md).
 - **Locally (recommended):** install the git hooks once per clone with `uvx pre-commit install`. This runs gitleaks and ruff before each commit.
   - *On the founder's current Windows machine, Windows Application Control blocked the `pre-commit` launcher, so the local hook is **not active there**. CI scanning still applies.*
 
+## Branch workflow
+
+All work happens on short-lived branches. `main` only changes through pull requests.
+
+| Branch prefix | Use for | Example |
+|---|---|---|
+| `feature/` | New phase work | `feature/p2-database` |
+| `fix/` | Fixing something broken | `fix/ci-secret-scan` |
+| `docs/` | Documentation only | `docs/p2-decisions` |
+
+1. Start from an up-to-date `main`: `git switch main` then `git pull`.
+2. Create a branch: `git switch -c feature/p2-database`.
+3. Commit the work on that branch.
+4. Push the branch: `git push -u origin feature/p2-database`.
+5. On GitHub, open a **pull request** into `main`, and wait for CI to go green.
+6. Merge the pull request, then delete the branch.
+
 ## Branch protection guidance (GitHub)
 
 Apply these once the repository is pushed. Settings → Branches → Add rule for `main`:
