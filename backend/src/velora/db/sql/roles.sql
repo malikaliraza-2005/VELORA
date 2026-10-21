@@ -10,6 +10,8 @@
 --                    and may read only the channel lookup columns.
 --   velora_platform  Founder onboarding tools (`python -m velora.admin`, P3). NOBYPASSRLS,
 --                    owns nothing, works one tenant at a time under the tenant expression.
+--   velora_dispatcher Worker work discovery (P5). NOBYPASSRLS, owns nothing. May read only
+--                    tenant ids and queue-timing columns across tenants, never a payload.
 
 DO $$
 BEGIN
@@ -25,6 +27,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'velora_platform') THEN
         CREATE ROLE velora_platform;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'velora_dispatcher') THEN
+        CREATE ROLE velora_dispatcher;
+    END IF;
 END
 $$;
 
@@ -36,10 +41,13 @@ ALTER ROLE velora_resolver
     NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
 ALTER ROLE velora_platform
     LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
+ALTER ROLE velora_dispatcher
+    LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
 
 ALTER ROLE velora_owner SET search_path = velora;
 ALTER ROLE app_rw SET search_path = velora;
 ALTER ROLE velora_platform SET search_path = velora;
+ALTER ROLE velora_dispatcher SET search_path = velora;
 
 -- The migrator must be able to hand the resolver function to velora_resolver, but must not
 -- inherit its privileges (or its RLS policy).

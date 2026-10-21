@@ -16,10 +16,11 @@
 | **P2** | **Complete (2026-10-21).** Authorised by the owner ("Start P2"). Merged in PR #3; CI green. |
 | **P3** | **Complete (2026-10-21).** Authorised by the owner ("Start P3"). PR #4; all five exit criteria verified in CI. See "P3 task evidence". |
 | **P4** | **Complete (2026-10-21).** Authorised by the owner ("Start P4"). PR #5; all four exit criteria verified in CI. See "P4 task evidence". |
-| **P5–P13** | **Not started. Not authorised.** |
+| **P5** | **Provider-neutral part complete (2026-10-21).** Authorised by the owner ("Start P5"). Built under AD-25 against the `FakeProvider`. **The OpenWA part (T2, the OpenWA parts of T3 and T5, and T6) is not built and stays blocked** until the Go (V-01). See "P5 task evidence". |
+| **P6–P13** | **Not started. Not authorised.** |
 | **Provider-neutral track (AD-25)** | Owner decision 2026-10-21: the provider-neutral parts of P5, and P6–P9, may be built against the `FakeProvider` before the OpenWA Go, each once it is authorised. |
 | **OpenWA adapter, real WhatsApp traffic, P10–P13** | **Blocked** until the live validation is complete and the owner gives a Go (V-01). |
-| **Application code** | P1 skeleton, the P2 database layer, P3 staff identity (login, sessions, roles, PINs, audit, founder onboarding tool), and P4 menu and ordering controls (versioned catalogue, CSV import, publish and rollback, availability, pause, capacity, settings, server-side pricing). No conversation, order or WhatsApp features. |
+| **Application code** | P1 skeleton, the P2 database layer, P3 staff identity (login, sessions, roles, PINs, audit, founder onboarding tool), P4 menu and ordering controls (versioned catalogue, CSV import, publish and rollback, availability, pause, capacity, settings, server-side pricing), and the P5 provider-neutral messaging core (provider interface, FakeProvider, durable inbox and outbox, channel state machine, circuit breaker, global pause, worker loop, log redaction). No real WhatsApp connection, conversation or order features. |
 | **Purchases / subscriptions** | None. |
 
 **What the owner can provide right now:**
@@ -43,8 +44,8 @@ A reduced live-trial variant that fits these constraints is **proposed, not appr
 | [P2 Database and tenant isolation](phases/p02-database-and-tenant-isolation.md) | **Complete** (2026-10-21) | — | PR #3; CI runs 39590467933 (PR) and 39590889951 (main); 187 tests | — |
 | [P3 Onboarding and staff identity](phases/p03-onboarding-and-staff-identity.md) | **Complete** (2026-10-21) | — (B7 resolved for the pilot: manual delivery, AD-27) | PR #4; CI run 39594079256 (315 tests); see "P3 task evidence" | Owner: review AD-27 |
 | [P4 Menu, availability and settings](phases/p04-menu-availability-and-settings.md) | **Complete** (2026-10-21) | — (tax values wait for the accountant, B3; quotes are refused until set) | PR #5; CI run 39598901486 (491 tests); see "P4 task evidence" | Owner: review AD-28; authorise the next phase when ready |
-| [P5 Provider abstraction and OpenWA adapter](phases/p05-whatsapp-provider-and-openwa-adapter.md) | Not started — **blocked** | **Live validation + Go (V-01)**; V-02, V-04, V-05, V-06, V-07, V-08 | — | — |
-| [P6 Conversation workflows](phases/p06-conversation-workflows.md) | Not started — blocked (depends on P5) | P4, P5; AI model choice; V-09 | — | — |
+| [P5 Provider abstraction and OpenWA adapter](phases/p05-whatsapp-provider-and-openwa-adapter.md) | **Provider-neutral part complete** (2026-10-21). **OpenWA part blocked** | OpenWA part: **live validation + Go (V-01)**; V-02, V-04, V-05, V-06, V-07, V-08 | Branch `feature/p5-provider-neutral`; 580 tests locally; CI pending. See "P5 task evidence" | Owner: review AD-29; authorise P6 when ready |
+| [P6 Conversation workflows](phases/p06-conversation-workflows.md) | Not started — not authorised. Can be built against the FakeProvider (AD-25) | Owner authorisation; AI model choice (B6); V-09 | — | — |
 | [P7 Order lifecycle](phases/p07-order-lifecycle.md) | Not started — blocked (depends on P6) | P6 | — | — |
 | [P8 Payment verification](phases/p08-payment-verification.md) | Not started — blocked (depends on P7) | P7, P3 | — | — |
 | [P9 Staff dashboard](phases/p09-staff-dashboard.md) | Not started — blocked (depends on P5–P8) | P3–P8 | — | — |
@@ -152,6 +153,50 @@ Implementation choices are recorded as **ADOPTED (delegated)** in decisions AD-2
 - **P9:** the dashboard uses `/api/menu/*`, `/api/ordering/*` and `/api/settings/ordering`.
 - **P13:** set tax rates only after the accountant confirms them (B3). Until then, quotes for that payment method are refused.
 
+## P5 task evidence (2026-10-21)
+
+Only the provider-neutral track that AD-25 allows was built. Implementation choices are recorded as **ADOPTED (delegated)** in decision AD-29, for owner review.
+
+| Task | Status | Evidence (tests in `backend/tests/`) |
+|---|---|---|
+| P5-T1 Interface, canonical events, FakeProvider | Done | `messaging/test_provider_contract.py`: the interface has exactly the planned methods; a contract suite runs against every working adapter (the FakeProvider now; OpenWA joins after the Go); webhook round trip; a bad, missing or tampered signature is rejected; a payload naming another session is rejected |
+| P5-T2 OpenWA adapter | **Not started: blocked (V-01, V-02)** | — |
+| P5-T3 Ingress and filtering | **Core done**; the OpenWA webhook endpoint is blocked | `messaging/test_inbox.py`: a duplicate webhook doesn't create a second event; group, status and broadcast events leave no row; a bad signature stores nothing; a mismatched or unknown session stores nothing; events are committed before `receive` returns; **a real worker process is killed mid-processing, and the event is processed exactly once after its lease expires**; a worker that lost its lease can't commit; per-customer order |
+| P5-T4 Outbox sender | **Core done**; the OpenWA timeout handling waits for V-06 | `messaging/test_outbox.py`: **with the channel down, messages are held and then flushed in order once reconnected**, using no attempts; stale replies are replaced by one "we're back" message per customer; a critical message with an unknown outcome is not re-sent; backoff 10 s to 15 m, then failed; no overtaking; rate cap; receipts only move forward; stored error text is redacted |
+| P5-T5 Channel state machine and health monitor | **Core done**; detection from OpenWA webhooks and polls is blocked | `messaging/test_channels.py`: **the circuit breaker pauses new orders within 60 seconds of `needs_qr`** (health poll), and at once from a session event or a send error; reconnecting reopens; **the global pause blocks new orders for every tenant**; only the founder's tool can set it, and its history can't be changed |
+| P5-T6 Inbound recovery | **Not started: blocked (V-04)** | — |
+| P5-T7 Meta Cloud stub | Done | `messaging/test_provider_contract.py`: it fits the interface and every method raises "not implemented" (AD-06) |
+| P5-T8 Provider boundary and log redaction | Done | `test_provider_boundary.py`: a static import-graph check that business modules have no path to an adapter, plus a self-test that it catches direct and indirect paths. `test_redaction.py`: secrets, URL passwords, tokens and phone numbers are scrubbed from log lines and tracebacks |
+| Work discovery (AD-26 finding) | Done | `messaging/test_dispatch.py`: `velora_dispatcher` finds only tenants with due work, can't read any payload or tenant data, and can't write; a worker round serves every tenant, and one tenant's failure doesn't stop the others. `db/test_isolation.py` lists its policies; `db/test_resolver.py` still finds only one SECURITY DEFINER function |
+
+**P5 exit criteria** (the provider-neutral ones):
+- **Replays:** met. A duplicate webhook doesn't create a second event.
+- **Crash test:** met. A killed worker's event is processed exactly once after its lease expires.
+- **Channel down:** met. Held messages are flushed in order.
+- **Circuit breaker:** met. It closes within 60 seconds of `needs_qr`.
+- **Provider boundary:** met. A static check enforces it.
+- **Signatures:** met for the core (nothing is stored). The 4xx response belongs to the OpenWA endpoint, which is **blocked**.
+- **Contract tests against real OpenWA payloads recorded in P0:** **not met; blocked** (V-01, and the paused live trial).
+
+Local run: 580 tests passed against PostgreSQL 17; ruff, format and mypy clean. **CI evidence pending.**
+
+**Findings for later phases:**
+- **P5-T2 (after the Go):** add `OpenWAAdapter` to `CONTRACT_PROVIDERS` with payloads recorded in P0, register it in `velora.messaging.registry`, and add the webhook endpoint. The endpoint must call `parse_webhook`, then `Ingress.receive`, and return 2xx only after `receive` returns. It must map `InvalidWebhookError` and `SessionMismatchError` to 4xx, `UnknownChannelError` to 404, and anything else to 5xx.
+- **P6:**
+  - Register a `message` handler with `InboxProcessor`. Inbound messages wait, stored, until then.
+  - Queue replies with `velora.messaging.outbox.enqueue` inside the same transaction as the state change.
+  - Use `purpose="conversational"` for replies and `"status_update"` for order updates. Set `critical=True` for payment instructions and order confirmations.
+  - Write the customer wording for `WE_ARE_BACK_TEXT`.
+  - Check `capabilities()` before using buttons or lists.
+- **P9:** show `unknown` and `failed` messages to staff. Show the channel state and the `channel_unavailable` and `global_pause` gate reasons.
+- **P10:** alert on channel state changes (`channel_events`), on `unknown` or `failed` messages, and on inbox events that end `failed`.
+- **P11:**
+  - Recovery mode marks in-flight (`sending`) messages `unknown`. The outbox already does this for critical messages after a lease ends.
+  - The outbox payload holds the recipient's number, so retention must cover `outbox_messages` and `inbox_events`.
+- **P12:**
+  - Run `python -m velora.workers` with `VELORA_DISPATCHER_DATABASE_URL`, and set the `velora_dispatcher` password out of band.
+  - Send the API's (uvicorn) logs through `velora.redaction.RedactingFormatter` too. The worker already does this.
+
 ## Resuming the live test
 
 The owner provides:
@@ -169,19 +214,19 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 
 | # | Blocker | Blocks | Owner of the action |
 |---|---|---|---|
-| B1 | Live OpenWA validation (G1–G5) not run; paused for resources | P5 onwards | Founder (resources) + engineering |
+| B1 | Live OpenWA validation (G1–G5) not run; paused for resources | The OpenWA part of P5, real WhatsApp traffic, P10–P13 | Founder (resources) + engineering |
 | B2 | Legal opinion on WhatsApp Terms-of-Service exposure and consent wording; deferred for budget | Connecting any real merchant (P13) | Founder + lawyer |
 | B3 | Tax by payment method not confirmed | Correct totals (P4, P13) | Founder + accountant |
 | B4 | Merchant acceptance of a separate number and kitchen device not confirmed | P13 | Founder (interviews) |
 | B5 | Vendor prices not fully verified (see price sheet) | Infrastructure commitment (P12) | Engineering |
 | B6 | AI model not selected (no real dataset) | P6 | Engineering |
 | B7 | ~~Delivery channel for staff magic links undecided~~ **Resolved for the pilot:** manual delivery (AD-27, ADOPTED (delegated)). Email is a later option | — | Engineering |
-| B8 | Owner authorisation for P5–P13 (P1 to P4 authorised 2026-10-21) | P5 onwards | Owner |
+| B8 | Owner authorisation for P6–P13 (P1 to P5 authorised 2026-10-21; P5 for its provider-neutral part only) | P6 onwards | Owner |
 | B9 | Reduced trial variant and trial tooling (P0-E1) not approved | Resuming the live test | Owner |
 
 ## Decisions awaiting the owner
 
-- Review the **ADOPTED (delegated)** decisions AD-11 to AD-24 and AD-26 to AD-28 ([decisions §8](../architecture/architecture-decisions.md#8-items-for-owner-review)).
+- Review the **ADOPTED (delegated)** decisions AD-11 to AD-24 and AD-26 to AD-29 ([decisions §8](../architecture/architecture-decisions.md#8-items-for-owner-review)).
 - Approve or reject the **reduced live-trial variant** ([validation plan §9](openwa-validation-plan.md)).
 - **Go/No-Go and V-01 to V-10:** after the live trial.
 - **Infrastructure cost commitment:** after vendor checks.
@@ -192,6 +237,7 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 
 | Date | Change |
 |---|---|
+| 2026-10-21 | Owner authorised **P5** ("Start P5"). Built only the provider-neutral track (AD-25): T1, T7 and T8, plus the cores of T3, T4 and T5 (migration 0007; 580 tests locally). The OpenWA parts (T2, T6, the OpenWA endpoint and detection) stay blocked by V-01. Decision AD-29 (P5 choices, including the `velora_dispatcher` role that resolves the AD-26 finding) recorded as ADOPTED (delegated). |
 | 2026-10-21 | Owner authorised **P4** ("Start P4"). P4 implemented and verified in CI (PR #5, run 39598901486; migration 0006; 491 tests). Decision AD-28 (P4 choices) recorded as ADOPTED (delegated). |
 | 2026-10-21 | Owner authorised **P3** ("Start P3"). P3 implemented and verified in CI (PR #4, run 39594079256), and B7 resolved for the pilot (manual delivery). Decisions AD-26 (P2 choices) and AD-27 (P3 choices) recorded as ADOPTED (delegated). |
 | 2026-10-21 | **P2 complete.** Owner authorised P2 ("Start P2"); merged in PR #3, CI green (runs 39590467933 and 39590889951). |

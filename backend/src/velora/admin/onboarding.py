@@ -260,6 +260,27 @@ class Onboarding:
             raise OnboardingError("that provider session is already registered") from exc
         return channel_id
 
+    # Global pause (P5-T5, AD-19) ----------------------------------------------------------
+
+    def set_global_pause(self, *, paused: bool, reason: str | None = None) -> uuid.UUID:
+        """Stop (or restart) new orders for every tenant. Appends to `global_pause_events`."""
+        if paused and not (reason and reason.strip()):
+            raise OnboardingError("a reason is required to pause every tenant")
+        with self._conn.transaction():
+            return self._insert(
+                "INSERT INTO velora.global_pause_events (paused, reason, operator, created_at) "
+                "VALUES (%s, %s, %s, %s) RETURNING id",
+                (paused, reason.strip() if reason else None, self._operator, self._clock.now()),
+            )
+
+    def global_pause_status(self) -> tuple[bool, str | None, datetime | None]:
+        """Paused, the reason and since when (the newest event), or not paused."""
+        row = self._conn.execute(
+            "SELECT paused, reason, created_at FROM velora.global_pause_events "
+            "ORDER BY seq DESC LIMIT 1"
+        ).fetchone()
+        return (False, None, None) if row is None else (row[0], row[1], row[2])
+
     # Owner access and recovery (AD-12) ----------------------------------------------------
 
     def invite_owner(self, tenant: TenantId, *, display_name: str) -> OwnerInvite:

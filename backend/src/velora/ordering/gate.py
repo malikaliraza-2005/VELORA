@@ -1,4 +1,5 @@
-"""Whether a tenant takes new orders right now: status, pause, menu and capacity (P4-T5).
+"""Whether a tenant takes new orders right now: status, pause, menu and capacity (P4-T5),
+plus the global pause and the channel circuit breaker (P5-T5).
 
 `check_new_cart` reads the database on every call, with no cache, so a pause applies to the
 very next cart. `claim_capacity` takes a place in the current 15-minute slot atomically; P7
@@ -19,11 +20,19 @@ from psycopg import AsyncConnection
 from velora.db import TenantId
 from velora.identity.errors import expect_row
 from velora.menu.store import get_live_version
+from velora.messaging.channels import global_pause, has_connected_channel
 from velora.ordering.settings import OrderingSettings, load_settings
 
 SLOT = timedelta(minutes=15)
 
-ClosedReason = Literal["restaurant_unavailable", "paused", "no_menu", "at_capacity"]
+ClosedReason = Literal[
+    "global_pause",
+    "restaurant_unavailable",
+    "channel_unavailable",
+    "paused",
+    "no_menu",
+    "at_capacity",
+]
 
 
 @dataclass(frozen=True)
@@ -51,10 +60,15 @@ async def slot_orders(conn: AsyncConnection[Any], at: datetime) -> int:
 async def check_new_cart(
     conn: AsyncConnection[Any], tenant: TenantId, now: datetime
 ) -> GateDecision:
+    if await global_pause(conn) is not None:
+        return GateDecision(False, "global_pause")
     cur = await conn.execute("SELECT status FROM velora.tenants")
     (status,) = expect_row(await cur.fetchone())
     if status in ("paused", "closed"):
         return GateDecision(False, "restaurant_unavailable")
+    # Circuit breaker: no new orders while the WhatsApp channel is down.
+    if not await has_connected_channel(conn):
+        return GateDecision(False, "channel_unavailable")
     settings = await load_settings(conn, tenant)
     if settings.is_paused(now):
         return GateDecision(False, "paused", settings.paused_until)

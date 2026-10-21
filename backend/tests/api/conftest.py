@@ -141,9 +141,21 @@ def new_restaurant(platform: Onboarding, settings: Settings) -> Restaurant:
     return Restaurant(tenant, settings.magic_link_url(invite.token.wire()), invite.staff_id)
 
 
+def connect_channel(db: PgDatabase, platform: Onboarding, tenant: TenantId) -> uuid.UUID:
+    """Register a simulated WhatsApp channel and mark it connected (P5 circuit breaker)."""
+    channel = platform.register_channel(
+        tenant, provider="fake", session_ref=f"session-{tenant.value}"
+    )
+    with db.admin() as conn:
+        conn.execute("UPDATE velora.channels SET state = 'connected' WHERE id = %s", (channel,))
+    return channel
+
+
 @pytest.fixture()
-def restaurant(platform: Onboarding, settings: Settings) -> Restaurant:
-    return new_restaurant(platform, settings)
+def restaurant(db: PgDatabase, platform: Onboarding, settings: Settings) -> Restaurant:
+    found = new_restaurant(platform, settings)
+    connect_channel(db, platform, found.tenant)
+    return found
 
 
 @pytest.fixture()

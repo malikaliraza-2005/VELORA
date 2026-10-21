@@ -27,6 +27,8 @@ class Settings:
     log_level: str
     # Runtime role (app_rw). None leaves the staff API unavailable (503), e.g. in unit tests.
     database_url: str | None = None
+    # Worker work discovery (velora_dispatcher, P5). Only `python -m velora.workers` uses it.
+    dispatcher_database_url: str | None = None
     # Origin of the staff dashboard. Magic links point here, and state-changing requests
     # that carry an Origin header must come from it.
     public_base_url: str = "http://localhost:8000"
@@ -53,6 +55,7 @@ class Settings:
             env=env,
             log_level=log_level,
             database_url=_optional(source, "VELORA_DATABASE_URL"),
+            dispatcher_database_url=_optional(source, "VELORA_DISPATCHER_DATABASE_URL"),
             public_base_url=base_url,
         )
 
