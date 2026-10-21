@@ -46,7 +46,7 @@ A reduced live-trial variant that fits these constraints is **proposed, not appr
 | [P3 Onboarding and staff identity](phases/p03-onboarding-and-staff-identity.md) | **Complete** (2026-10-21) | — (B7 resolved for the pilot: manual delivery, AD-27) | PR #4; CI run 39594079256 (315 tests); see "P3 task evidence" | Owner: review AD-27 |
 | [P4 Menu, availability and settings](phases/p04-menu-availability-and-settings.md) | **Complete** (2026-10-21) | — (tax values wait for the accountant, B3; quotes are refused until set) | PR #5; CI run 39598901486 (491 tests); see "P4 task evidence" | Owner: review AD-28; authorise the next phase when ready |
 | [P5 Provider abstraction and OpenWA adapter](phases/p05-whatsapp-provider-and-openwa-adapter.md) | **Provider-neutral part complete** (2026-10-21). **OpenWA part blocked** | OpenWA part: **live validation + Go (V-01)**; V-02, V-04, V-05, V-06, V-07, V-08 | PR #6; CI run 39604566511 (580 tests). See "P5 task evidence" | Owner: review AD-29 |
-| [P6 Conversation workflows](phases/p06-conversation-workflows.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). Split limit provisional: V-09. AI accuracy on real data: P0-F6. Groq for real customers: owner decision (AD-30) | Migration 0008; 72 new tests (652 in total). See "P6 task evidence" | Owner: review AD-30 and decide on Groq vs AD-04; confirm the 90% target; authorise P7 when ready |
+| [P6 Conversation workflows](phases/p06-conversation-workflows.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). Split limit provisional: V-09. AI accuracy on real data: P0-F6. Groq for real customers: owner decision (AD-30) | PR #7; CI run 39613089570 (652 tests). See "P6 task evidence" | Owner: review AD-30 and decide on Groq vs AD-04; confirm the 90% target; authorise P7 when ready |
 | [P7 Order lifecycle](phases/p07-order-lifecycle.md) | Not started — blocked (depends on P6) | P6 | — | — |
 | [P8 Payment verification](phases/p08-payment-verification.md) | Not started — blocked (depends on P7) | P7, P3 | — | — |
 | [P9 Staff dashboard](phases/p09-staff-dashboard.md) | Not started — blocked (depends on P5–P8) | P3–P8 | — | — |
@@ -212,6 +212,8 @@ Only the provider-neutral track that AD-25 allows was built. Implementation choi
 | P6-T6 Human handoff | Done (inbox screen is P9) | `test_handoff.py`: every trigger, including two misses; the bot sends nothing while handed over; Resume bot restores it, keeps the cart and is audited; kitchen roles refused. `api/test_audit_coverage.py` covers the endpoint |
 | P6-T7 Offline evaluation harness | Done (harness only; accuracy not measured) | `test_units.py`: the harness scores correct and failed cases. The synthetic A15 dataset is in `backend/evaluation/`. Running it against Groq needs `VELORA_GROQ_API_KEY` |
 
+**Verified in CI:** [run 39613089570](https://github.com/malikaliraza-2005/VELORA/actions/runs/39613089570) (PR #7). 652 tests passed against PostgreSQL 17, and the secret scan was clean.
+
 **P6 exit criteria:**
 - **Deterministic:** met. An unavailable item is never added; prices always equal the database values; AI output is never sent verbatim as a total.
 - **Injection:** met for the suite above.
@@ -266,7 +268,7 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 
 | Date | Change |
 |---|---|
-| 2026-10-21 | Owner authorised **P6** ("Start P6") and asked to consider Groq as a free LLM. Built the provider-neutral part: engine, commands, renderer, AI proposals with a Groq adapter, cart and checkout, handoff, and the offline harness (migration 0008; 652 tests). Decision AD-30 recorded as ADOPTED (delegated). Groq's free tier for real customer messages conflicts with AD-04 and is left to the owner (B10). |
+| 2026-10-21 | Owner authorised **P6** ("Start P6") and asked to consider Groq as a free LLM. Built the provider-neutral part: engine, commands, renderer, AI proposals with a Groq adapter, cart and checkout, handoff, and the offline harness (PR #7, CI run 39613089570; migration 0008; 652 tests). Decision AD-30 recorded as ADOPTED (delegated). Groq's free tier for real customer messages conflicts with AD-04 and is left to the owner (B10). |
 | 2026-10-21 | Owner authorised **P5** ("Start P5"). Built only the provider-neutral track (AD-25): T1, T7 and T8, plus the cores of T3, T4 and T5 (PR #6, CI run 39604566511; migration 0007; 580 tests). The OpenWA parts (T2, T6, the OpenWA endpoint and detection) stay blocked by V-01. Decision AD-29 (P5 choices, including the `velora_dispatcher` role that resolves the AD-26 finding) recorded as ADOPTED (delegated). |
 | 2026-10-21 | Owner authorised **P4** ("Start P4"). P4 implemented and verified in CI (PR #5, run 39598901486; migration 0006; 491 tests). Decision AD-28 (P4 choices) recorded as ADOPTED (delegated). |
 | 2026-10-21 | Owner authorised **P3** ("Start P3"). P3 implemented and verified in CI (PR #4, run 39594079256), and B7 resolved for the pilot (manual delivery). Decisions AD-26 (P2 choices) and AD-27 (P3 choices) recorded as ADOPTED (delegated). |

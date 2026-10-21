@@ -467,7 +467,7 @@ Stop or pause the pilot on any of these:
     - Decide whether order status updates go to opted-out customers.
   - **P9:** show the handoff inbox and Resume bot, and the `ai_enabled` switch (already accepted by `PATCH /api/settings/ordering`).
   - **P11:** retention must also cover `conversations.context`, which holds delivery addresses.
-- **Evidence:** PR (this phase). Migration 0008; tests in `backend/tests/conversation/`.
+- **Evidence:** PR #7. CI run 39613089570 (652 tests). Migration 0008; tests in `backend/tests/conversation/`.
 
 ---
 
