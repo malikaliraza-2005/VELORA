@@ -74,6 +74,15 @@ class ProposerError(Exception):
     """The model could not be reached or answered with something unusable."""
 
 
+class RateLimitedError(ProposerError):
+    """The model's provider refused the request for its rate limit. A customer gets the
+    numbered menu like any other error; the offline harness waits and retries."""
+
+    def __init__(self, message: str, *, retry_after: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
 class Proposer(Protocol):
     async def propose(self, request: ProposalRequest) -> Proposal: ...
 

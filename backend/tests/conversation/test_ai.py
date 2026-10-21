@@ -40,6 +40,7 @@ from velora.ai.proposer import (
     ProposalRequest,
     ProposedLine,
     ProposerError,
+    RateLimitedError,
     minimise,
     parse_proposal,
 )
@@ -374,6 +375,15 @@ def test_groq_errors_never_carry_the_key_or_the_body() -> None:
         assert str(failed.value) == message
         assert failed.value.__cause__ is None
     assert "test-key-not-real" not in repr(groq(unreachable))
+
+
+def test_groq_reports_its_rate_limit_with_the_retry_after() -> None:
+    async def throttled(url: str, headers: dict[str, str], body: bytes, timeout: float) -> bytes:
+        raise urllib.error.HTTPError(url, 429, "Too Many Requests", {"retry-after": "7"}, None)  # type: ignore[arg-type]
+
+    with pytest.raises(RateLimitedError) as failed:
+        asyncio.run(groq(throttled).propose(ProposalRequest("ek coke", ())))
+    assert failed.value.retry_after == 7
 
 
 def test_groq_sends_the_key_only_in_the_authorization_header() -> None:

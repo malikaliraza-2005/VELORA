@@ -218,7 +218,11 @@ Only the provider-neutral track that AD-25 allows was built. Implementation choi
 - **Deterministic:** met. An unavailable item is never added; prices always equal the database values; AI output is never sent verbatim as a total.
 - **Injection:** met for the suite above.
 - **Concurrency:** met.
-- **AI accuracy ≥90% (offline, not a CI gate):** **not measured.** It needs the real P0-F6 dataset and a model run, and the target is still an estimate.
+- **AI accuracy ≥90% (offline, not a CI gate):** **not measured on real data.** It needs the real P0-F6 dataset, and the target is still an estimate.
+  - First sanity check, 2026-10-21: Groq free tier, `openai/gpt-oss-20b`, synthetic A15 set, **18/20 = 90%**, about 1 s per request.
+  - Misses: "3 chicken biryani half" was read as quantity 1. "cod karunga" was read as a payment claim, but the customer only means to pay cash, so the reply would be wrong.
+  - Both are safe in the engine: the customer confirms a proposal with YES, and a payment claim confirms nothing.
+  - 20 cases is too few to choose a model. The free tier needs about 8 seconds between requests to stay under its tokens-per-minute limit.
 - **Real-WhatsApp exit tests:** gated by the Go (V-01).
 
 **Findings for later phases:** see AD-30. In short:

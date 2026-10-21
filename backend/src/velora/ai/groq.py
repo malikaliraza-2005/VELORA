@@ -25,6 +25,7 @@ from velora.ai.proposer import (
     Proposal,
     ProposalRequest,
     ProposerError,
+    RateLimitedError,
     parse_proposal,
 )
 
@@ -64,6 +65,16 @@ async def _urllib_transport(
             return data
 
     return await anyio.to_thread.run_sync(call, abandon_on_cancel=True)
+
+
+def _retry_after(exc: urllib.error.HTTPError) -> float | None:
+    """Seconds from the Retry-After header, if Groq sent a usable one."""
+    value = exc.headers.get("retry-after") if exc.headers is not None else None
+    try:
+        seconds = float(value) if value is not None else None
+    except ValueError:
+        return None
+    return seconds if seconds is not None and 0 <= seconds <= 120 else None
 
 
 class GroqProposer:
@@ -115,6 +126,10 @@ class GroqProposer:
         try:
             raw = await self._transport(API_URL, headers, body, self._timeout)
         except urllib.error.HTTPError as exc:
+            if exc.code == 429:
+                raise RateLimitedError(
+                    "Groq answered HTTP 429 (rate limit)", retry_after=_retry_after(exc)
+                ) from None
             raise ProposerError(f"Groq answered HTTP {exc.code}") from None
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise ProposerError(f"Groq could not be reached ({type(exc).__name__})") from None

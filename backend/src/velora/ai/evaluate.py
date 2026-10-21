@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import io
 import json
 import sys
 import time
@@ -28,7 +29,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from velora.ai.proposer import Proposal, Proposer, ProposerError, build_request
+from velora.ai.proposer import (
+    Proposal,
+    Proposer,
+    ProposerError,
+    RateLimitedError,
+    build_request,
+)
 from velora.ai.registry import build_proposer
 from velora.config import Settings
 from velora.menu.model import Category, Item, Menu, ModifierGroup, Option
@@ -125,16 +132,38 @@ def is_correct(case: Case, got: Proposal) -> bool:
     return Counter(_key(ln.sku, ln.quantity, ln.choices) for ln in got.lines) == case.lines
 
 
-async def evaluate(proposer: Proposer, menu: Menu, cases: list[Case], *, timeout: float) -> Report:
+async def evaluate(
+    proposer: Proposer,
+    menu: Menu,
+    cases: list[Case],
+    *,
+    timeout: float,
+    pause: float = 0.0,
+    retries: int = 3,
+    rate_wait: float = 20.0,
+) -> Report:
+    """Run every case. `pause` seconds between cases keeps a free tier's per-minute token
+    limit; a rate-limited case waits (Retry-After, else `rate_wait`) and is retried."""
     report = Report()
-    for case in cases:
+    for n, case in enumerate(cases):
+        if n and pause:
+            await asyncio.sleep(pause)
         started = time.monotonic()
         got: Proposal | None = None
         error: str | None = None
-        try:
-            got = await asyncio.wait_for(proposer.propose(build_request(case.text, menu)), timeout)
-        except (ProposerError, TimeoutError) as exc:
-            error = f"{type(exc).__name__}: {exc}"
+        for attempt in range(retries + 1):
+            try:
+                request = build_request(case.text, menu)
+                got = await asyncio.wait_for(proposer.propose(request), timeout)
+                error = None
+                break
+            except RateLimitedError as exc:
+                error = f"{type(exc).__name__}: {exc}"
+                if attempt < retries:
+                    await asyncio.sleep(exc.retry_after or rate_wait)
+            except (ProposerError, TimeoutError) as exc:
+                error = f"{type(exc).__name__}: {exc}"
+                break
         correct = got is not None and is_correct(case, got)
         report.results.append(Result(case, correct, got, error, time.monotonic() - started))
     return report
@@ -160,14 +189,25 @@ def render_report(report: Report) -> str:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Offline AI proposal evaluation (P6-T7).")
     parser.add_argument("dataset", type=Path)
+    parser.add_argument(
+        "--pause",
+        type=float,
+        default=8.0,
+        help="seconds between cases, to stay under a free tier's tokens-per-minute limit",
+    )
     args = parser.parse_args(argv)
+    # Datasets hold Urdu script; a Windows console defaults to a code page without it.
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(encoding="utf-8")
     settings = Settings.from_env()
     proposer = build_proposer(settings)
     if proposer is None:
         print("Set VELORA_GROQ_API_KEY to run the evaluation.", file=sys.stderr)
         return 2
     menu, cases = load_dataset(args.dataset)
-    report = asyncio.run(evaluate(proposer, menu, cases, timeout=settings.ai_timeout_seconds))
+    report = asyncio.run(
+        evaluate(proposer, menu, cases, timeout=settings.ai_timeout_seconds, pause=args.pause)
+    )
     print(f"Model: {settings.ai_model}")
     print(render_report(report))
     return 0
