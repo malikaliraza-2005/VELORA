@@ -217,6 +217,26 @@ def test_order_total_must_add_up(db: PgDatabase, tenants: SeededTenants) -> None
         _as_tenant(conn, a["tenants"])
         with pytest.raises(errors.CheckViolation):
             conn.execute(
-                "UPDATE velora.orders SET total_paisa = total_paisa + 1 WHERE id = %s",
+                "INSERT INTO velora.orders (tenant_id, order_number, customer_id, fulfilment, "
+                "subtotal_paisa, total_paisa) VALUES (%s, velora.next_order_number(), %s, "
+                "'takeaway', 1000, 1001)",
+                (a["tenants"], a["customers"]),
+            )
+
+
+@pytest.mark.parametrize(
+    "assignment",
+    ["total_paisa = total_paisa + 1, subtotal_paisa = subtotal_paisa + 1", "tax_bps = 1"],
+)
+def test_order_amounts_and_snapshot_cannot_change(
+    db: PgDatabase, tenants: SeededTenants, assignment: str
+) -> None:
+    """P7: price snapshots are fixed once the order exists (AD-20)."""
+    a = tenants.a
+    with db.app() as conn, conn.transaction(force_rollback=True):
+        _as_tenant(conn, a["tenants"])
+        with pytest.raises(errors.RestrictViolation):
+            conn.execute(
+                f"UPDATE velora.orders SET {assignment} WHERE id = %s".encode(),  # noqa: S608
                 (a["orders"],),
             )

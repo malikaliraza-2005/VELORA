@@ -18,10 +18,11 @@
 | **P4** | **Complete (2026-10-21).** Authorised by the owner ("Start P4"). PR #5; all four exit criteria verified in CI. See "P4 task evidence". |
 | **P5** | **Provider-neutral part complete (2026-10-21).** Authorised by the owner ("Start P5"). Built under AD-25 against the `FakeProvider`. **The OpenWA part (T2, the OpenWA parts of T3 and T5, and T6) is not built and stays blocked** until the Go (V-01). See "P5 task evidence". |
 | **P6** | **Provider-neutral part built (2026-10-21).** Authorised by the owner ("Start P6"). Built under AD-25 against the `FakeProvider`, with Groq as the first AI adapter (AD-30). Order creation on YES is P7. **Real customer text must not go to Groq** until the owner decides on AD-04 (see AD-30). See "P6 task evidence". |
-| **P7–P13** | **Not started. Not authorised.** |
+| **P7** | **Provider-neutral part built (2026-10-21).** Authorised by the owner ("Start P7"). Built under AD-25 against the `FakeProvider`. Choices recorded in AD-31. Transfer orders can't be used for real until P8 sends the account details. See "P7 task evidence". |
+| **P8–P13** | **Not started. Not authorised.** |
 | **Provider-neutral track (AD-25)** | Owner decision 2026-10-21: the provider-neutral parts of P5, and P6–P9, may be built against the `FakeProvider` before the OpenWA Go, each once it is authorised. |
 | **OpenWA adapter, real WhatsApp traffic, P10–P13** | **Blocked** until the live validation is complete and the owner gives a Go (V-01). |
-| **Application code** | P1 skeleton, the P2 database layer, P3 staff identity (login, sessions, roles, PINs, audit, founder onboarding tool), P4 menu and ordering controls (versioned catalogue, CSV import, publish and rollback, availability, pause, capacity, settings, server-side pricing), and the P5 provider-neutral messaging core (provider interface, FakeProvider, durable inbox and outbox, channel state machine, circuit breaker, global pause, worker loop, log redaction). P6 conversations (engine, commands, numbered menus, AI proposals via Groq, cart, checkout, templated summary, handoff). No real WhatsApp connection and no order creation. |
+| **Application code** | P1 skeleton, the P2 database layer, P3 staff identity (login, sessions, roles, PINs, audit, founder onboarding tool), P4 menu and ordering controls (versioned catalogue, CSV import, publish and rollback, availability, pause, capacity, settings, server-side pricing), and the P5 provider-neutral messaging core (provider interface, FakeProvider, durable inbox and outbox, channel state machine, circuit breaker, global pause, worker loop, log redaction). P6 conversations (engine, commands, numbered menus, AI proposals via Groq, cart, checkout, templated summary, handoff). P7 order lifecycle (YES nonce, order transaction, transition table, timers, status messages, recovery hook, staff order API). No real WhatsApp connection. |
 | **Purchases / subscriptions** | None. |
 
 **What the owner can provide right now:**
@@ -47,8 +48,8 @@ A reduced live-trial variant that fits these constraints is **proposed, not appr
 | [P4 Menu, availability and settings](phases/p04-menu-availability-and-settings.md) | **Complete** (2026-10-21) | — (tax values wait for the accountant, B3; quotes are refused until set) | PR #5; CI run 39598901486 (491 tests); see "P4 task evidence" | Owner: review AD-28; authorise the next phase when ready |
 | [P5 Provider abstraction and OpenWA adapter](phases/p05-whatsapp-provider-and-openwa-adapter.md) | **Provider-neutral part complete** (2026-10-21). **OpenWA part blocked** | OpenWA part: **live validation + Go (V-01)**; V-02, V-04, V-05, V-06, V-07, V-08 | PR #6; CI run 39604566511 (580 tests). See "P5 task evidence" | Owner: review AD-29 |
 | [P6 Conversation workflows](phases/p06-conversation-workflows.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). Split limit provisional: V-09. AI accuracy on real data: P0-F6. Groq for real customers: owner decision (AD-30) | PR #7; CI run 39613089570 (652 tests). See "P6 task evidence" | Owner: review AD-30 and decide on Groq vs AD-04; confirm the 90% target; authorise P7 when ready |
-| [P7 Order lifecycle](phases/p07-order-lifecycle.md) | Not started — blocked (depends on P6) | P6 | — | — |
-| [P8 Payment verification](phases/p08-payment-verification.md) | Not started — blocked (depends on P7) | P7, P3 | — | — |
+| [P7 Order lifecycle](phases/p07-order-lifecycle.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). The P11 drill also exercises the recovery hook | PR (P7); see "P7 task evidence" | Owner: review AD-31; authorise P8 when ready |
+| [P8 Payment verification](phases/p08-payment-verification.md) | Not started — not authorised | P7 (built), P3 | — | — |
 | [P9 Staff dashboard](phases/p09-staff-dashboard.md) | Not started — blocked (depends on P5–P8) | P3–P8 | — | — |
 | [P10 Monitoring](phases/p10-monitoring-and-alerting.md) | Not started — blocked | P5–P9 | — | — |
 | [P11 Backups and recovery](phases/p11-backups-recovery-and-runbooks.md) | Not started — blocked | P2, P5, P7; V-07 | — | — |
@@ -227,6 +228,35 @@ Only the provider-neutral track that AD-25 allows was built. Implementation choi
 - **P9:** the handoff inbox and the `ai_enabled` switch.
 - **P11:** `conversations.context` holds addresses.
 
+## P7 task evidence (2026-10-21)
+
+Only the provider-neutral track that AD-25 allows was built. Implementation choices are recorded as **ADOPTED (delegated)** in decision AD-31, for owner review.
+
+| Task | Status | Evidence (tests in `backend/tests/`) |
+|---|---|---|
+| P7-T1 Confirmation nonce | Done | `orders/test_confirmation.py`: **an expired nonce can't create an order** (directly, and YES shows a new summary); a nonce bound to another customer, conversation, cart or address is rejected; a nonce works once; a new summary voids the old one; only the nonce's hash is stored |
+| P7-T2 Order-creation transaction | Done | `orders/test_placement.py`: **two simultaneous YES replies create exactly one order, 100 of 100 runs**; 20 runs of two racing order transactions without the chat lock also create one; **a price change or an item running out between the summary and YES is refused and re-confirmed**; a pause or a full slot refuses; **an injected failure after each of the 5 steps commits nothing**, and the same YES then works; snapshots, lines with options, first transition, audit row and the critical confirmation |
+| P7-T3 States and transition table | Done | `orders/test_lifecycle.py`: **the database guard accepts exactly the table's moves** (every pair, for every payment and fulfilment); **the engine refuses every illegal move and every wrong actor** (every pair × actor × kind); a stale move is refused; staff must give a reason; **a customer cancel after acceptance is refused**; cancel before acceptance works and gives the capacity place back; **every transition writes a history row and an audit row**. `api/test_orders.py`: the kitchen device progresses an order; repeated or stale moves get 409; payment verification is refused (P8); another restaurant's order is not found. `db/test_schema.py`: amounts and snapshots can't change |
+| P7-T4 Timers | Done | `orders/test_timers.py`: an unpaid transfer order expires exactly at its window (simulated clock), and the customer is told; a cash order never expires; the worker finds the tenant through `velora_dispatcher` and expires the order in its round. Nonce expiry: `test_confirmation.py` |
+| P7-T5 Duplicate flag | Done | `orders/test_placement.py`: a second identical order within 10 minutes is flagged and **not** cancelled; one more than 10 minutes later is not flagged |
+| P7-T6 Customer status notifications | Done | `orders/test_notifications.py`: **with every send failing, every transition still succeeds** and the order ends `completed`; opted-out customers get no status messages |
+| P7-T7 Recovery hook | Done (P11 calls it) | `orders/test_recovery.py`: **pending actions created before an outage are expired in recovery**; the customer is asked to confirm again, and the old YES places nothing; a later summary is untouched; an already-expired one is voided silently |
+
+**Verified in CI:** _pending; filled in once the PR's CI run is green._
+
+**P7 exit criteria** (the provider-neutral ones):
+- **Double YES:** met. Exactly one order in 100 of 100 runs.
+- **Stale confirmation:** met. A price change or an unavailable item is rejected, and the customer confirms again.
+- **Illegal transitions:** met. They are rejected by the engine and by the database guard.
+- **Expiry:** met. An expired nonce can't create an order.
+- **Recovery:** met for the hook. The full recovery-mode drill is P11.
+- **Real-WhatsApp exit tests:** gated by the Go (V-01).
+
+**Findings for later phases:** see AD-31. In short:
+- **P8:** verification uses `lifecycle.transition`; send the account details after a transfer order; late payments after expiry; `refund_pending` → `cancelled`, or a `refunded` state.
+- **P9:** show `possible_duplicate`, the allowed next moves and the history.
+- **P11:** call `expire_pre_outage` and extend `payment_due_at` by the outage length; retention must cover `pending_actions.payload`.
+
 ## Resuming the live test
 
 The owner provides:
@@ -251,13 +281,13 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 | B5 | Vendor prices not fully verified (see price sheet) | Infrastructure commitment (P12) | Engineering |
 | B6 | AI model not selected (no real dataset). Groq gpt-oss-20b is the built adapter (AD-30), but the selection needs the P0-F6 evaluation | Pilot use of AI | Engineering |
 | B7 | ~~Delivery channel for staff magic links undecided~~ **Resolved for the pilot:** manual delivery (AD-27, ADOPTED (delegated)). Email is a later option | — | Engineering |
-| B8 | Owner authorisation for P7–P13 (P1 to P6 authorised 2026-10-21; P5 and P6 for their provider-neutral parts only) | P7 onwards | Owner |
+| B8 | Owner authorisation for P8–P13 (P1 to P7 authorised 2026-10-21; P5 to P7 for their provider-neutral parts only) | P8 onwards | Owner |
 | B10 | Groq's free tier vs AD-04 (paid tier, no training on our data). Groq's training terms are unverified | Sending real customer messages to the AI | Owner |
 | B9 | Reduced trial variant and trial tooling (P0-E1) not approved | Resuming the live test | Owner |
 
 ## Decisions awaiting the owner
 
-- Review the **ADOPTED (delegated)** decisions AD-11 to AD-24 and AD-26 to AD-30 ([decisions §8](../architecture/architecture-decisions.md#8-items-for-owner-review)).
+- Review the **ADOPTED (delegated)** decisions AD-11 to AD-24 and AD-26 to AD-31 ([decisions §8](../architecture/architecture-decisions.md#8-items-for-owner-review)).
 - Approve or reject the **reduced live-trial variant** ([validation plan §9](openwa-validation-plan.md)).
 - **Go/No-Go and V-01 to V-10:** after the live trial.
 - **Infrastructure cost commitment:** after vendor checks.

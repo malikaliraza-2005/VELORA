@@ -1,4 +1,4 @@
-"""The worker loop (P5): health poll, inbox and outbox, tenant by tenant.
+"""The worker loop (P5, P7): health poll, inbox, order timers and outbox, tenant by tenant.
 
 Each round asks the dispatcher which tenants have work, then works on each inside its own
 tenant scope. One tenant's failure is logged (redacted) and doesn't stop the others.
@@ -16,6 +16,7 @@ from velora.messaging.channels import HEALTH_POLL_INTERVAL, ChannelMonitor
 from velora.messaging.dispatch import Dispatcher
 from velora.messaging.inbox import InboxProcessor
 from velora.messaging.outbox import OutboxSender
+from velora.orders.timers import OrderTimers
 from velora.redaction import error_text
 
 log = logging.getLogger(__name__)
@@ -33,11 +34,13 @@ class Worker:
         clock: Clock,
         *,
         health_interval: timedelta = HEALTH_POLL_INTERVAL,
+        timers: OrderTimers | None = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._inbox = inbox
         self._outbox = outbox
         self._monitor = monitor
+        self._timers = timers
         self._clock = clock
         self._health_interval = health_interval
         self._last_poll: datetime | None = None
@@ -54,6 +57,9 @@ class Worker:
         for tenant in await self._dispatcher.tenants_with_work(self._inbox.event_types):
             try:
                 await self._inbox.run_once(tenant)
+                if self._timers is not None:
+                    # Before the outbox, so an expiry notice goes out in the same round.
+                    await self._timers.run_once(tenant)
                 await self._outbox.run_once(tenant)
             except Exception as exc:
                 log.error("queue work failed for %s: %s", tenant.value, error_text(exc))

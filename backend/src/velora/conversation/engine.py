@@ -26,8 +26,12 @@ Two messages in a row that the bot can't understand hand the chat to staff.
 amount shown is re-priced from the published menu and settings at that moment; the summary is
 a fixed template over `price_cart`'s quote. AI output never reaches a total.
 
-**Not in P6:** YES on the summary does not create an order yet; that is P7 (the nonce and the
-order transaction). Until then the customer is told ordering isn't switched on.
+**Orders (P7).** Showing the summary issues a single-use YES nonce bound to the chat, the
+customer and the exact checkout (`velora.orders.placement`). YES places the order inside a
+savepoint of this transaction: if anything is refused or fails, nothing of the order is kept,
+and the customer gets a clear message (an updated summary to confirm, the cart, or an apology).
+CANCEL clears a cart being built; with nothing being built it cancels the customer's placed
+order, if it hasn't been accepted yet.
 """
 
 from __future__ import annotations
@@ -70,6 +74,7 @@ from velora.ordering.pricing import (
     price_line,
 )
 from velora.ordering.settings import OrderingSettings, load_settings
+from velora.orders import lifecycle, placement
 from velora.redaction import error_text
 
 log = logging.getLogger(__name__)
@@ -180,6 +185,20 @@ def _same(a: CartLine, b: CartLine) -> bool:
         return line.sku, frozenset((g.casefold(), o.casefold()) for g, o in line.choices)
 
     return key(a) == key(b)
+
+
+def checkout_of(context: Mapping[str, Any]) -> placement.Checkout:
+    """What a chat in the summary state is about to confirm (P7), from its context."""
+    pickup_at = context.get("pickup_at")
+    return placement.Checkout(
+        lines=tuple(_lines(context.get("cart"))),
+        fulfilment=context["fulfilment"],
+        payment_method=context["payment_method"],
+        address=context.get("address"),
+        address_message=context.get("address_message"),
+        delivery_note=context.get("delivery_note"),
+        pickup_at=None if pickup_at is None else datetime.fromisoformat(pickup_at),
+    )
 
 
 @dataclass
@@ -441,7 +460,7 @@ class ConversationEngine:
         if words in HANDOFF_WORDS or any(p in words for p in HANDOFF_PHRASES):
             self._handoff(turn, "requested")
         elif words == "cancel":
-            self._cancel(turn)
+            await self._cancel(turn, data)
         elif words == "status":
             await self._status(turn, data)
         elif _asks_for_menu(words):
@@ -507,12 +526,60 @@ class ConversationEngine:
         turn.leave_checkout()
         turn.say(copy.HANDOFF if reason == "requested" else copy.HANDOFF_AFTER_MISSES)
 
-    def _cancel(self, turn: _Turn) -> None:
-        """CANCEL clears what is being built. It never opts out (AD-24). Cancelling a placed
-        order is P7 (allowed only before it is accepted)."""
+    async def _cancel(self, turn: _Turn, data: _Data) -> None:
+        """CANCEL clears what is being built. With nothing being built, it cancels the
+        customer's open order, only before the restaurant accepts it (P7-T3). It never opts
+        out (AD-24)."""
+        ctx = turn.context
+        building = bool(ctx.get("cart") or ctx.get("proposal") or ctx.get("pending"))
         turn.state = "idle"
         turn.context = {}
-        turn.say(copy.CART_CLEARED)
+        order = await self._open_order(turn, data)
+        cancellable = order is not None and self._customer_can_cancel(order)
+        if building or order is None:
+            turn.say(
+                copy.open_order_kept(order.reference)
+                if order is not None and cancellable
+                else copy.CART_CLEARED
+            )
+            return
+        if not cancellable:
+            turn.say(copy.cannot_cancel(order.reference, order.status))
+            return
+        try:
+            async with data.conn.transaction():
+                await lifecycle.transition(
+                    data.conn,
+                    data.tenant,
+                    order.id,
+                    to="cancelled",
+                    actor=lifecycle.Actor("customer", turn.chat.customer_id),
+                    now=turn.now,
+                    expected=order.status,
+                )
+        except lifecycle.StaleTransitionError:
+            # Staff moved it first (e.g. accepted it); tell the customer where it is now.
+            current = await lifecycle.load_order(data.conn, order.id)
+            turn.say(copy.cannot_cancel(order.reference, current.status if current else ""))
+
+    @staticmethod
+    def _customer_can_cancel(order: lifecycle.OrderRef) -> bool:
+        return "cancelled" in lifecycle.next_statuses(
+            order.status,
+            "customer",
+            payment_method=order.payment_method,
+            fulfilment=order.fulfilment,
+        )
+
+    async def _open_order(self, turn: _Turn, data: _Data) -> lifecycle.OrderRef | None:
+        """The customer's latest order that hasn't ended."""
+        cur = await data.conn.execute(
+            "SELECT id FROM velora.orders WHERE customer_id = %s AND NOT status = ANY(%s) "
+            "ORDER BY created_at DESC LIMIT 1",
+            (turn.chat.customer_id, sorted(lifecycle.TERMINAL)),
+        )
+        row = await cur.fetchone()
+        return None if row is None else await lifecycle.load_order(data.conn, row[0])
 
     async def _status(self, turn: _Turn, data: _Data) -> None:
         cur = await data.conn.execute(
@@ -526,7 +593,7 @@ class ConversationEngine:
             turn.say(copy.NO_ORDERS)
             return
         number, status, since, prefix = row
-        turn.say(copy.order_status(f"{prefix}-{number:04d}", status, since))
+        turn.say(copy.order_status(lifecycle.order_reference(prefix, number), status, since))
 
     # Menu and cart (P6-T3) -----------------------------------------------------------------
 
@@ -754,7 +821,7 @@ class ConversationEngine:
         elif intent == "handoff":
             self._handoff(turn, "requested")
         elif intent == "cancel":
-            self._cancel(turn)
+            await self._cancel(turn, data)
         elif intent == "delivery_info":
             s = await data.settings()
             turn.say(
@@ -1025,7 +1092,18 @@ class ConversationEngine:
             turn.leave_checkout()
             turn.say(f"Sorry, {exc}. Reply CART to review your cart, or 0 to talk to staff.")
             return
+        nonce = await placement.issue(
+            data.conn,
+            data.tenant,
+            conversation_id=turn.chat.conversation_id,
+            customer_id=turn.chat.customer_id,
+            checkout=checkout_of(turn.context),
+            quote=quote,
+            now=turn.now,
+            ttl=SUMMARY_TTL,
+        )
         ctx["quote"] = {
+            "nonce": nonce,
             "menu_version_id": str(quote.menu_version_id),
             "total_paisa": quote.total_paisa,
             "expires_at": (turn.now + SUMMARY_TTL).isoformat(),
@@ -1040,21 +1118,51 @@ class ConversationEngine:
         turn.say(text)
 
     async def _confirm(self, turn: _Turn, data: _Data) -> None:
-        """YES on the summary. If it expired or anything changed, the customer gets the new
-        summary to confirm instead (A7). Creating the order is P7."""
-        shown = dict(turn.context.get("quote") or {})
-        expired = not shown or turn.now > datetime.fromisoformat(shown["expires_at"])
-        await self._summary(turn, data)
-        if turn.state != "summary":
+        """YES on the summary: place the order (P7-T2). The confirmation is queued by the order
+        transaction itself. If the summary expired or anything changed, the customer gets the
+        new summary to confirm instead (A7)."""
+        chat = turn.chat
+        try:
+            # A savepoint: a refusal or a failure keeps nothing of the order.
+            async with data.conn.transaction():
+                await placement.place_order(
+                    data.conn,
+                    data.tenant,
+                    (turn.context.get("quote") or {}).get("nonce"),
+                    conversation_id=chat.conversation_id,
+                    customer_id=chat.customer_id,
+                    checkout=checkout_of(turn.context),
+                    now=turn.now,
+                )
+        except placement.OrderRefused as exc:
+            await self._refused(turn, data, exc)
             return
-        current = turn.context["quote"]
-        changed = (current["menu_version_id"], current["total_paisa"]) != (
-            shown.get("menu_version_id"),
-            shown.get("total_paisa"),
-        )
-        if expired or changed:
-            turn.replies[-1] = f"{copy.SUMMARY_UPDATED}\n{turn.replies[-1]}"
+        except Exception as exc:
+            log.error("placing an order failed, nothing was kept: %s", error_text(exc))
+            turn.say(copy.ORDER_FAILED)
             return
-        # Keep the original expiry: confirming doesn't extend it.
-        current["expires_at"] = shown["expires_at"]
-        turn.replies[-1:] = [copy.NOT_LIVE_YET]
+        turn.state, turn.context = "idle", {}
+
+    async def _refused(self, turn: _Turn, data: _Data, exc: placement.OrderRefused) -> None:
+        if exc.code in ("nonce", "changed"):
+            await self._summary(turn, data)
+            if turn.state == "summary":
+                turn.replies[-1] = f"{copy.SUMMARY_UPDATED}\n{turn.replies[-1]}"
+            return
+        turn.state = "browsing"
+        turn.leave_checkout()
+        if exc.code in ("closed", "at_capacity"):
+            decision = exc.decision
+            turn.say(
+                copy.closed(
+                    await data.restaurant(),
+                    None if decision is None else decision.reason,
+                    None if decision is None else decision.reopens_at,
+                )
+            )
+        elif exc.code == "unavailable":
+            # Re-confirmation: the cart without what can't be ordered, then CHECKOUT again.
+            quoted, notes = await self._priced_cart(turn, data)
+            turn.say(render.cart(quoted, notes) if quoted else "\n".join([*notes, copy.CART_EMPTY]))
+        else:
+            turn.say(f"Sorry, {exc}. Reply CART to review your cart, or 0 to talk to staff.")
