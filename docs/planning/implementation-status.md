@@ -12,7 +12,7 @@
 |---|---|
 | **P0 desk research** | **In progress.** Free, non-code work only (owner choice, 2026-10-21). |
 | **P0 live OpenWA validation** | **Paused** until a test SIM and the required setup exist (see "Resuming the live test"). |
-| **P1** | **Authorised 2026-10-21. In progress.** |
+| **P1** | **Complete (2026-10-21).** Both exit criteria verified in CI. |
 | **P2–P13** | **Not started. Not authorised.** |
 | **Provider-neutral track (AD-25)** | Owner decision 2026-10-21: the provider-neutral parts of P5, and P6–P9, may be built against the `FakeProvider` before the OpenWA Go, each once it is authorised. |
 | **OpenWA adapter, real WhatsApp traffic, P10–P13** | **Blocked** until the live validation is complete and the owner gives a Go (V-01). |
@@ -36,7 +36,7 @@ A reduced live-trial variant that fits these constraints is **proposed, not appr
 | Phase | Status | Blockers | Evidence | Next action |
 |---|---|---|---|---|
 | [P0 Pre-implementation gates](phases/p00-pre-implementation-gates.md) | **Desk research in progress; live test paused** | Test SIM; machine to run OpenWA; volunteers (reduced variant proposed); lawyer/accountant budget | Desk review notes (see P0 tasks) | Finish desk tasks; owner decides on the reduced trial variant |
-| [P1 Repository foundation](phases/p01-repository-foundation.md) | **In progress**: implemented and committed locally; **exit criteria not yet verified** | CI can only run after a push; local secret-scan hook blocked by Windows Application Control | See "P1 task evidence" below | Owner: push when ready, then confirm CI results |
+| [P1 Repository foundation](phases/p01-repository-foundation.md) | **Complete** (2026-10-21) | — | CI runs 39587396126 (main) and 39587837550 (PR #2 self-test); see "P1 task evidence" | Owner: apply the branch protection rule (see README) |
 | [P2 Database and tenant isolation](phases/p02-database-and-tenant-isolation.md) | Not started; not authorised | P1 | — | — |
 | [P3 Onboarding and staff identity](phases/p03-onboarding-and-staff-identity.md) | Not started; not authorised | P2; delivery channel for magic links (gap) | — | — |
 | [P4 Menu, availability and settings](phases/p04-menu-availability-and-settings.md) | Not started; not authorised | P2, P3; tax values (accountant) | — | — |
@@ -86,12 +86,12 @@ A task only counts as done when its evidence exists.
 | P1-T1 Repository and layout | Done locally | `git init` with `origin` set to GitHub (**not pushed**). `backend/`, `web/`, `infra/`, `docs/`, README. `.gitignore` checks in `backend/tests/test_repo_hygiene.py` pass locally |
 | P1-T2 Toolchain | Done locally | Python 3.12, uv lockfile (`backend/uv.lock`) committed. Locally: `ruff format --check` clean, `ruff check` clean, `mypy --strict` clean, `pytest` 17 passed |
 | P1-T3 Configuration | Done locally | `.env.example` with placeholders only. The placeholder test passes |
-| P1-T4 Secret scanning | **CI scan verified; fake-key detection pending** | `.pre-commit-config.yaml` (gitleaks v8.30.1). The local hook is blocked on the founder's machine by Windows Application Control. CI scans the **full history** with a pinned gitleaks image, and it passed on `main` (run 39587396126: no leaks). A CI **self-test** now checks that a fake-key commit is flagged (branch `fix/ci-secret-scan-selftest`). Its result will be recorded here. |
+| P1-T4 Secret scanning | **Verified in CI** | Full-history gitleaks scan: `no leaks found` ([run 39587837550](https://github.com/malikaliraza-2005/VELORA/actions/runs/39587837550)). Self-test: the fake-key commit was flagged (`leaks found: 1`, then PASS) in the same run. The local pre-commit hook remains blocked on the founder's machine by Windows Application Control, so CI is the enforcing control. |
 | P1-T5 CI and branch protection guidance | **Verified** | On merged `main`, [CI run 39587396126](https://github.com/malikaliraza-2005/VELORA/actions/runs/39587396126): `Backend checks` passed and `Secret scan (gitleaks)` passed. The first run (39586964758) failed only in the old gitleaks-action step, fixed in PR #1. Branch protection guidance is in the root README. **Applying the protection rule on GitHub is pending the owner** (this session's permission settings blocked it). |
 
 **P1 exit criteria:**
 - **CI passes on an empty skeleton:** **met** (run 39587396126: both jobs green).
-- **The secret scanner blocks a fake-key commit:** *pending* the self-test result on branch `fix/ci-secret-scan-selftest`.
+- **The secret scanner blocks a fake-key commit:** **met**. The CI self-test flagged the fake-key commit (run 39587837550).
 
 ## Resuming the live test
 
@@ -133,6 +133,7 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 
 | Date | Change |
 |---|---|
+| 2026-10-21 | **P1 complete.** The PR #2 CI self-test proved fake-key detection (run 39587837550). |
 | 2026-10-21 | PR #1 merged; CI green on `main` (run 39587396126). At the owner's request, the commit history on `main` was rewritten to remove AI co-author trailers (contents unchanged; force-pushed with lease; local backup tag kept). New SHAs: `cd57482`, `24ee91b`, `4e40fae`, `d4e134a`. Self-test branch for fake-key detection opened. |
 | 2026-10-21 | Owner pushed `main`. CI backend checks passed; the secret-scan job failed (tool error). Fix on branch `fix/ci-secret-scan`. Owner asked to work in branches from now on. |
 | 2026-10-21 | P1 implemented and committed locally (not pushed). Local checks pass. The CI run and secret-scanner blocking are **unverified** (see P1 task evidence). |
