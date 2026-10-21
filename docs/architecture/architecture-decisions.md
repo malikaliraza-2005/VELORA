@@ -370,7 +370,7 @@ Stop or pause the pilot on any of these:
   - Whether tax also applies to the delivery fee, and the rates themselves, stay **PENDING EXTERNAL** (B3).
 - **Settings row:** one per tenant, created with database defaults on first use. Defaults: delivery and takeaway on, fee 0, pickup 20–240 minutes, COD and transfer on, transfer window 30 minutes, no COD limit, no capacity cap, tax not set. Per-merchant values are set with each merchant (PENDING EXTERNAL).
 - **Not gated:** going live doesn't require a published menu. The ordering gate refuses carts without one.
-- **Evidence:** PR (P4). See the status file.
+- **Evidence:** PR #5. CI run 39598901486 (491 tests).
 
 ---
 

@@ -15,7 +15,7 @@
 | **P1** | **Complete (2026-10-21).** Both exit criteria verified in CI. |
 | **P2** | **Complete (2026-10-21).** Authorised by the owner ("Start P2"). Merged in PR #3; CI green. |
 | **P3** | **Complete (2026-10-21).** Authorised by the owner ("Start P3"). PR #4; all five exit criteria verified in CI. See "P3 task evidence". |
-| **P4** | **Implemented (2026-10-21); awaiting CI.** Authorised by the owner ("Start P4"). See "P4 task evidence". |
+| **P4** | **Complete (2026-10-21).** Authorised by the owner ("Start P4"). PR #5; all four exit criteria verified in CI. See "P4 task evidence". |
 | **P5–P13** | **Not started. Not authorised.** |
 | **Provider-neutral track (AD-25)** | Owner decision 2026-10-21: the provider-neutral parts of P5, and P6–P9, may be built against the `FakeProvider` before the OpenWA Go, each once it is authorised. |
 | **OpenWA adapter, real WhatsApp traffic, P10–P13** | **Blocked** until the live validation is complete and the owner gives a Go (V-01). |
@@ -42,7 +42,7 @@ A reduced live-trial variant that fits these constraints is **proposed, not appr
 | [P1 Repository foundation](phases/p01-repository-foundation.md) | **Complete** (2026-10-21) | — | CI runs 39587396126 (main) and 39587837550 (PR #2 self-test); see "P1 task evidence" | Owner: apply the branch protection rule (see README) |
 | [P2 Database and tenant isolation](phases/p02-database-and-tenant-isolation.md) | **Complete** (2026-10-21) | — | PR #3; CI runs 39590467933 (PR) and 39590889951 (main); 187 tests | — |
 | [P3 Onboarding and staff identity](phases/p03-onboarding-and-staff-identity.md) | **Complete** (2026-10-21) | — (B7 resolved for the pilot: manual delivery, AD-27) | PR #4; CI run 39594079256 (315 tests); see "P3 task evidence" | Owner: review AD-27 |
-| [P4 Menu, availability and settings](phases/p04-menu-availability-and-settings.md) | **Implemented; awaiting CI** (2026-10-21) | Tax values (accountant, B3): quotes are refused until set | 491 tests pass locally; see "P4 task evidence" | Owner: review AD-28; authorise the next phase when ready |
+| [P4 Menu, availability and settings](phases/p04-menu-availability-and-settings.md) | **Complete** (2026-10-21) | — (tax values wait for the accountant, B3; quotes are refused until set) | PR #5; CI run 39598901486 (491 tests); see "P4 task evidence" | Owner: review AD-28; authorise the next phase when ready |
 | [P5 Provider abstraction and OpenWA adapter](phases/p05-whatsapp-provider-and-openwa-adapter.md) | Not started — **blocked** | **Live validation + Go (V-01)**; V-02, V-04, V-05, V-06, V-07, V-08 | — | — |
 | [P6 Conversation workflows](phases/p06-conversation-workflows.md) | Not started — blocked (depends on P5) | P4, P5; AI model choice; V-09 | — | — |
 | [P7 Order lifecycle](phases/p07-order-lifecycle.md) | Not started — blocked (depends on P6) | P6 | — | — |
@@ -143,7 +143,7 @@ Implementation choices are recorded as **ADOPTED (delegated)** in decisions AD-2
 | P4-T5 Pause and capacity | Done | `api/test_ordering.py`: pausing blocks new carts within 5 seconds; the capacity cap rejects orders above the limit and reopens in the next slot; 10 concurrent claims never overshoot a cap of 3 |
 | P4-T6 Settings | Done (placeholder tax values only, B3) | `api/test_ordering.py`: each setting is applied by pricing (fee, minimum, tax by payment method, switched-off options); an unset tax rate refuses the quote; changes are audited with old and new values; kitchen roles are refused. `ordering/test_pricing.py`: pricing and rule unit tests |
 
-**P4 exit criteria:** all four are covered by tests that pass locally (491 tests against PostgreSQL 17). **CI evidence pending.**
+**P4 exit criteria:** all four are **met in CI**: [run 39598901486](https://github.com/malikaliraza-2005/VELORA/actions/runs/39598901486) (PR #5). 491 tests passed against PostgreSQL 17, and the secret scan was clean.
 
 **Findings for later phases:**
 - **P6:** offer only `LiveMenu.offerable()`. Price every cart with `velora.ordering.pricing.price_cart` and check `gate.check_new_cart` before starting a cart. Pickup times use `check_pickup_time`.
@@ -192,7 +192,7 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 
 | Date | Change |
 |---|---|
-| 2026-10-21 | Owner authorised **P4** ("Start P4"). P4 implemented on branch `feature/p4-menu-settings` (migration 0006; 491 tests pass locally). Decision AD-28 (P4 choices) recorded as ADOPTED (delegated). |
+| 2026-10-21 | Owner authorised **P4** ("Start P4"). P4 implemented and verified in CI (PR #5, run 39598901486; migration 0006; 491 tests). Decision AD-28 (P4 choices) recorded as ADOPTED (delegated). |
 | 2026-10-21 | Owner authorised **P3** ("Start P3"). P3 implemented and verified in CI (PR #4, run 39594079256), and B7 resolved for the pilot (manual delivery). Decisions AD-26 (P2 choices) and AD-27 (P3 choices) recorded as ADOPTED (delegated). |
 | 2026-10-21 | **P2 complete.** Owner authorised P2 ("Start P2"); merged in PR #3, CI green (runs 39590467933 and 39590889951). |
 | 2026-10-21 | **P1 complete.** The PR #2 CI self-test proved fake-key detection (run 39587837550). |
