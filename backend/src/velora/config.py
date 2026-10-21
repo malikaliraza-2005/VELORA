@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
 VALID_ENVS = frozenset({"development", "test", "staging", "production"})
 VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR"})
 PLACEHOLDER = "CHANGE_ME"
+DEFAULT_AI_MODEL = "openai/gpt-oss-20b"
+DEFAULT_AI_TIMEOUT_SECONDS = 8.0
 
 
 def _optional(source: Mapping[str, str], name: str) -> str | None:
@@ -32,6 +34,11 @@ class Settings:
     # Origin of the staff dashboard. Magic links point here, and state-changing requests
     # that carry an Origin header must come from it.
     public_base_url: str = "http://localhost:8000"
+    # Groq API key for AI proposals (P6-T4, AD-30). None: no AI; the numbered menu only.
+    groq_api_key: str | None = field(default=None, repr=False)
+    ai_model: str = DEFAULT_AI_MODEL
+    # After this long the AI is abandoned and the customer gets the numbered menu.
+    ai_timeout_seconds: float = DEFAULT_AI_TIMEOUT_SECONDS
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Settings:
@@ -51,12 +58,22 @@ class Settings:
             raise ValueError(f"VELORA_PUBLIC_BASE_URL must be an origin, got {base_url!r}")
         if configured and env in {"staging", "production"} and parts.scheme != "https":
             raise ValueError("VELORA_PUBLIC_BASE_URL must use https in staging and production")
+        timeout_text = _optional(source, "VELORA_AI_TIMEOUT_SECONDS")
+        try:
+            timeout = DEFAULT_AI_TIMEOUT_SECONDS if timeout_text is None else float(timeout_text)
+        except ValueError:
+            timeout = -1.0
+        if not 0.5 <= timeout <= 30:
+            raise ValueError("VELORA_AI_TIMEOUT_SECONDS must be a number from 0.5 to 30")
         return cls(
             env=env,
             log_level=log_level,
             database_url=_optional(source, "VELORA_DATABASE_URL"),
             dispatcher_database_url=_optional(source, "VELORA_DISPATCHER_DATABASE_URL"),
             public_base_url=base_url,
+            groq_api_key=_optional(source, "VELORA_GROQ_API_KEY"),
+            ai_model=_optional(source, "VELORA_AI_MODEL") or DEFAULT_AI_MODEL,
+            ai_timeout_seconds=timeout,
         )
 
     @property

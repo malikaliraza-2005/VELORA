@@ -63,9 +63,9 @@ BACKOFF = (
     timedelta(minutes=5),
     timedelta(minutes=15),
 )
-# Placeholder wording until P6 writes the customer copy.
+# Customer wording (P6, MVP scope Appendix A13; draft, untested with customers).
 WE_ARE_BACK_TEXT = (
-    "Sorry for the delay: we were offline for a while and are back now. "
+    "Sorry for the delay — we had a short technical problem and we're back now. "
     "If you still need help, please send your message again."
 )
 

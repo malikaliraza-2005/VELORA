@@ -28,6 +28,7 @@ from tests.api.conftest import (
 from tests.db.conftest import PgDatabase
 from velora.app import create_app
 from velora.config import Settings
+from velora.db import TenantId
 
 
 @dataclass
@@ -35,6 +36,8 @@ class World:
     client: TestClient
     owner: Device
     target: Device  # a kitchen member, signed in
+    db: PgDatabase
+    tenant: TenantId
 
 
 Case = Callable[[World], tuple[Device, httpx2.Response]]
@@ -68,6 +71,26 @@ def _availability(w: World) -> tuple[Device, httpx2.Response]:
 def _resume(w: World) -> tuple[Device, httpx2.Response]:
     w.owner.request("POST", "/api/ordering/pause", json={"minutes": 20})
     return w.owner, w.owner.request("POST", "/api/ordering/resume")
+
+
+def _resume_bot(w: World) -> tuple[Device, httpx2.Response]:
+    """P6: a chat handed over to staff, then Resume bot."""
+    with w.db.admin() as conn, conn.transaction():
+        conn.execute("SELECT set_config('app.tenant_id', %s, true)", (str(w.tenant.value),))
+        row = conn.execute(
+            "INSERT INTO velora.customers (tenant_id, phone_e164) VALUES (%s, '+923000000555') "
+            "RETURNING id",
+            (w.tenant.value,),
+        ).fetchone()
+        assert row is not None
+        found = conn.execute(
+            "INSERT INTO velora.conversations (tenant_id, channel_id, customer_id, state, "
+            "handoff_at, handoff_reason) SELECT %s, id, %s, 'handoff', now(), 'requested' "
+            "FROM velora.channels WHERE tenant_id = %s RETURNING id",
+            (w.tenant.value, row[0], w.tenant.value),
+        ).fetchone()
+        assert found is not None
+    return w.owner, w.owner.request("POST", f"/api/conversations/{found[0]}/resume")
 
 
 CASES: dict[tuple[str, str], tuple[str, Case]] = {
@@ -145,6 +168,11 @@ CASES: dict[tuple[str, str], tuple[str, Case]] = {
         lambda w: (w.owner, w.owner.request("POST", "/api/ordering/pause", json={"minutes": 20})),
     ),
     ("POST", "/api/ordering/resume"): ("ordering.resumed", _resume),
+    # P6: human handoff.
+    ("POST", "/api/conversations/{conversation_id}/resume"): (
+        "conversation.bot_resumed",
+        _resume_bot,
+    ),
 }
 
 
@@ -169,7 +197,7 @@ def test_privileged_endpoint_writes_an_audit_row(
     db: PgDatabase,
 ) -> None:
     action, run = CASES[key]
-    world = World(client, owner, join(client, owner, "kitchen"))
+    world = World(client, owner, join(client, owner, "kitchen"), db, restaurant.tenant)
     with db.admin() as conn:
         before = {r[0] for r in _audit(conn, restaurant)}
 

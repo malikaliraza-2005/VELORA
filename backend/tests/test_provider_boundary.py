@@ -4,6 +4,9 @@ The check parses every module under `src/velora`, builds the import graph (inclu
 `from x import y` where y is a submodule and imports inside functions), and fails if any
 module outside the composition roots can reach `velora.messaging.providers`, directly or
 through other modules. It also refuses any third-party OpenWA client outside the adapters.
+
+The same rule covers AI model adapters (P6-T4): only the AI composition roots may reach
+`velora.ai.groq`; business code sees the `Proposer` interface only.
 """
 
 from __future__ import annotations
@@ -18,6 +21,8 @@ SRC = Path(__file__).resolve().parents[1] / "src"
 ADAPTERS = "velora.messaging.providers"
 # The only modules allowed to wire adapters in.
 COMPOSITION_ROOTS = frozenset({"velora.messaging.registry", "velora.workers.__main__"})
+AI_ADAPTERS = "velora.ai.groq"
+AI_ROOTS = frozenset({"velora.ai.registry", "velora.ai.evaluate", "velora.workers.__main__"})
 
 
 def _module_name(path: Path) -> str:
@@ -57,28 +62,32 @@ def import_graph(src: Path = SRC) -> dict[str, set[str]]:
     return graph
 
 
-def is_adapter(module: str) -> bool:
-    return module == ADAPTERS or module.startswith(ADAPTERS + ".")
+def is_adapter(module: str, adapters: str = ADAPTERS) -> bool:
+    return module == adapters or module.startswith(adapters + ".")
 
 
-def violations(graph: Mapping[str, set[str]]) -> dict[str, list[str]]:
+def violations(
+    graph: Mapping[str, set[str]],
+    adapters: str = ADAPTERS,
+    roots: frozenset[str] = COMPOSITION_ROOTS,
+) -> dict[str, list[str]]:
     """Each non-root, non-adapter module that can reach an adapter, with one import path."""
     found: dict[str, list[str]] = {}
     for start in graph:
-        if start in COMPOSITION_ROOTS or is_adapter(start) or start == "velora":
+        if start in roots or is_adapter(start, adapters) or start == "velora":
             continue
         parents: dict[str, str | None] = {start: None}
         queue = [start]
         while queue:
             current = queue.pop(0)
-            if is_adapter(current):
+            if is_adapter(current, adapters):
                 path = [current]
                 while (parent := parents[path[-1]]) is not None:
                     path.append(parent)
                 found[start] = list(reversed(path))
                 break
             for nxt in sorted(graph.get(current, ())):
-                if nxt not in parents and nxt not in COMPOSITION_ROOTS:
+                if nxt not in parents and nxt not in roots:
                     parents[nxt] = current
                     queue.append(nxt)
     return found
@@ -94,6 +103,14 @@ def test_composition_roots_are_imported_by_nothing_but_entry_points() -> None:
     graph = import_graph()
     importers = {m for m, targets in graph.items() if targets & COMPOSITION_ROOTS}
     assert importers <= COMPOSITION_ROOTS
+
+
+def test_business_modules_have_no_import_path_to_an_ai_adapter() -> None:
+    graph = import_graph()
+    assert AI_ADAPTERS in graph
+    assert violations(graph, AI_ADAPTERS, AI_ROOTS) == {}
+    # The engine sees only the interface.
+    assert "velora.ai.proposer" in graph["velora.conversation.engine"]
 
 
 def test_no_openwa_client_is_imported_outside_the_adapters() -> None:

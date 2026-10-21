@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Authorisation** | **NOT AUTHORISED.** Once authorised and once P5 is complete (as built so far), it may be built and tested against the `FakeProvider` before the OpenWA Go ([AD-25](../../architecture/architecture-decisions.md#ad-25-provider-neutral-build-track-while-the-openwa-test-waits)). Tests that need real WhatsApp traffic stay gated by the Go. |
+| **Authorisation** | **Authorised 2026-10-21 ("Start P6").** The provider-neutral part is built against the `FakeProvider` ([AD-25](../../architecture/architecture-decisions.md#ad-25-provider-neutral-build-track-while-the-openwa-test-waits)); choices are in AD-30. Tests that need real WhatsApp traffic stay gated by the Go. |
 | **Depends on** | P4, P5. AI model choice (P0-E5). V-09 (menu formatting limits). |
 | **Blocks** | P7 |
 | **Effort (estimate)** | about 2 weeks |
@@ -18,6 +18,7 @@
 | AD-24: STOP opt-out; first-reply disclosure; data minimisation | ADOPTED (delegated) |
 | V-09: menu formatting limits | VALIDATION-DEPENDENT |
 | PC-10: AI candidate models | PROPOSED, awaiting review |
+| AD-30: P6 choices; Groq as the first AI adapter | ADOPTED (delegated); Groq free tier for real customers needs an owner decision |
 | AI accuracy target (≥90%) | **Estimate; owner to confirm** |
 
 Sample wording is in [MVP scope Appendix A](../mvp-scope.md#appendix-a-sample-customer-whatsapp-conversations-draft-2026-10-21) (draft, untested).

@@ -11,11 +11,12 @@ from fastapi.responses import JSONResponse
 from psycopg_pool import AsyncConnectionPool
 
 from velora import __version__
-from velora.api import menu, ordering
+from velora.api import conversations, menu, ordering
 from velora.api.deps import Services
 from velora.api.routes import router
 from velora.clock import Clock, SystemClock
 from velora.config import Settings
+from velora.conversation.service import ConversationService
 from velora.db import Database
 from velora.identity.errors import (
     ConflictError,
@@ -53,6 +54,7 @@ def build_services(settings: Settings, database: Database, clock: Clock) -> Serv
         staff=StaffService(database, clock),
         menu=MenuService(database, clock),
         ordering=OrderingService(database, clock),
+        conversations=ConversationService(database, clock),
         login_limiter=RateLimiter(LOGIN_RATE_LIMIT, LOGIN_RATE_WINDOW, clock),
     )
 
@@ -97,4 +99,5 @@ def create_app(
     app.include_router(router)
     app.include_router(menu.router)
     app.include_router(ordering.router)
+    app.include_router(conversations.router)
     return app

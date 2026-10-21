@@ -1,4 +1,5 @@
-"""Per-tenant ordering settings (P4-T6): delivery, pickup, tax, COD, transfers and capacity.
+"""Per-tenant ordering settings (P4-T6): delivery, pickup, tax, COD, transfers and capacity,
+plus the AI switch (P6-T4).
 
 The row is created with the database defaults the first time it is needed. The limits here
 match the table's CHECK constraints, which remain the final guard.
@@ -34,6 +35,8 @@ class OrderingSettings:
     max_orders_per_slot: int | None
     paused_until: datetime | None
     pause_reason: str | None
+    # AI proposals for free text (P6-T4). Off: customers use the numbered menu only.
+    ai_enabled: bool = True
 
     def is_paused(self, now: datetime) -> bool:
         return self.paused_until is not None and now < self.paused_until
@@ -44,7 +47,9 @@ class OrderingSettings:
 
 _COLUMNS = ", ".join(f.name for f in fields(OrderingSettings))
 
-FLAGS = frozenset({"delivery_enabled", "takeaway_enabled", "cod_enabled", "transfer_enabled"})
+FLAGS = frozenset(
+    {"delivery_enabled", "takeaway_enabled", "cod_enabled", "transfer_enabled", "ai_enabled"}
+)
 
 # Field -> (lowest, highest, may be None).
 BOUNDS: dict[str, tuple[int, int, bool]] = {
