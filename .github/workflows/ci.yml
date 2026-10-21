@@ -1,6 +1,7 @@
 name: CI
 
 # P1-T5: lint, type checks, tests and a secret scan on every push and pull request.
+# P2-T6: the tests include the tenant-isolation suite, run against PostgreSQL.
 on:
   push:
   pull_request:
@@ -26,7 +27,25 @@ jobs:
         run: uv run ruff check .
       - name: Type check
         run: uv run mypy
+      # P2: database tests need a disposable PostgreSQL 17. The superuser password is
+      # generated per run; the test session sets random passwords for the VELORA roles.
+      - name: Start PostgreSQL 17
+        run: |
+          pw="$(openssl rand -hex 16)"
+          echo "::add-mask::$pw"
+          docker run -d --name velora-pg -e POSTGRES_PASSWORD="$pw"             -p 127.0.0.1:5432:5432 postgres:17
+          # Probe over TCP: the image's init-time server listens on the socket only.
+          for _ in $(seq 1 60); do
+            docker exec velora-pg pg_isready -q -h 127.0.0.1 -U postgres && break
+            sleep 1
+          done
+          docker exec velora-pg pg_isready -h 127.0.0.1 -U postgres
+          echo "VELORA_TEST_ADMIN_URL=postgresql://postgres:$pw@127.0.0.1:5432/postgres" >> "$GITHUB_ENV"
       - name: Tests
+        env:
+          # Fail, rather than skip, if the database tests cannot run.
+          VELORA_REQUIRE_DB_TESTS: "1"
+          VELORA_TEST_PG_TOOLS: docker exec -i velora-pg
         run: uv run pytest
 
   secret-scan:

@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi",
+    "psycopg-pool>=3.3.3",
+    "psycopg[binary]>=3.3.6",
 ]
 
 [dependency-groups]

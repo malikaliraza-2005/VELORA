@@ -1,0 +1,20 @@
+DROP FUNCTION anonymise_customer(uuid);
+DROP FUNCTION next_order_number();
+
+DROP TABLE channel_events;
+DROP TABLE audit_log;
+DROP TABLE payments;
+DROP TABLE order_transitions;
+DROP TABLE order_items;
+DROP TABLE orders;
+DROP TABLE pending_actions;
+DROP TABLE outbox_messages;
+DROP TABLE inbox_events;
+DROP TABLE conversations;
+DROP TABLE customers;
+DROP TABLE owner_verifications;
+DROP TABLE consents;
+DROP TABLE staff_sessions;
+DROP TABLE staff_members;
+DROP TABLE channels;
+DROP TABLE tenants;
