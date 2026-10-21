@@ -68,6 +68,8 @@ EXTRA_POLICIES: dict[tuple[str, str], tuple[list[str], str]] = {
     ("channels", "dispatch_lookup"): (["velora_dispatcher"], "SELECT"),
     ("inbox_events", "dispatch_lookup"): (["velora_dispatcher"], "SELECT"),
     ("outbox_messages", "dispatch_lookup"): (["velora_dispatcher"], "SELECT"),
+    # P7: which tenants have a transfer window due (tenant_id, status, payment_due_at only).
+    ("orders", "dispatch_lookup"): (["velora_dispatcher"], "SELECT"),
     # Founder onboarding tools (P3): the platform role may list tenants, and otherwise works
     # one tenant at a time under the shared tenant expression (checked below).
     ("tenants", "platform_directory"): (["velora_platform"], "SELECT"),
@@ -97,6 +99,8 @@ APPEND_ONLY = {
     "consents",
     "owner_verifications",
     "order_transitions",
+    # P7: an order's lines are its price snapshot.
+    "order_items",
     "audit_log",
     "channel_events",
     "menu_publications",

@@ -1,8 +1,8 @@
 """Cross-tenant work discovery for the workers (P5, AD-26 finding).
 
 Runs as `velora_dispatcher`, which can read only tenant ids and queue-timing columns, never
-a payload (migration 0007). It answers one question: which tenants have work due? The worker
-then does that work as `app_rw` inside each tenant's RLS scope.
+a payload (migrations 0007 and 0009). It answers one question: which tenants have work due?
+The worker then does that work as `app_rw` inside each tenant's RLS scope.
 """
 
 from __future__ import annotations
@@ -20,7 +20,8 @@ class Dispatcher:
         self._clock = clock
 
     async def tenants_with_work(self, inbox_event_types: Sequence[str]) -> list[TenantId]:
-        """Tenants with inbox events due for a handler we run, or outbox messages to act on.
+        """Tenants with inbox events due for a handler we run, outbox messages to act on, or
+        an order timer due (P7: a transfer window that has passed).
 
         Held messages count, so a reconnected channel is flushed on the next round.
         """
@@ -36,6 +37,9 @@ class Dispatcher:
                  WHERE (status = 'pending' AND next_attempt_at <= %(now)s)
                     OR status = 'waiting_for_channel'
                     OR (status = 'sending' AND locked_until <= %(now)s)
+                UNION
+                SELECT tenant_id FROM velora.orders
+                 WHERE status = 'awaiting_transfer' AND payment_due_at <= %(now)s
                 """,
                 {"types": list(inbox_event_types), "now": self._clock.now()},
             )

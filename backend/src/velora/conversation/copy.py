@@ -37,9 +37,7 @@ VOICE_NOTE = (
 )
 TEXT_ONLY = "Sorry, I can only read typed messages. Please type your order, or reply 0 for staff."
 CART_EMPTY = "Your cart is empty. Reply MENU to see the menu."
-CART_CLEARED = (
-    "Done — your cart is cleared. If you already placed an order, reply 0 and staff will help."
-)
+CART_CLEARED = "Done — your cart is cleared."
 NOTHING_TO_CONFIRM = "There's nothing to confirm right now. Reply MENU for the menu."
 PROPOSAL_HINT = "Is this correct? Reply YES to add to your cart, or MENU to choose from the menu."
 PAYMENT_CLAIM = (
@@ -54,9 +52,13 @@ NOTE_ASK = 'Got it. Any delivery note? (e.g. "gate no. 2"). Reply SKIP if none.'
 PICKUP_ASK = "When will you pick it up? Reply with a number, or type a time like 8:30 pm."
 PAYMENT_ASK = "How will you pay?"
 CHOOSE_NUMBER = "Please reply with one of the numbers above."
-NOT_LIVE_YET = (
-    "Thanks! Placing orders over WhatsApp isn't switched on yet for this restaurant. "
-    "Reply 0 to talk to staff."
+ORDER_FAILED = (
+    "Sorry, something went wrong and your order was not placed. "
+    "Reply YES to try again, or 0 to talk to staff."
+)
+RECONFIRM_AFTER_OUTAGE = (
+    "Sorry for the delay — your previous order summary expired during a technical problem. "
+    "Reply CART to review your cart and confirm again."
 )
 SUMMARY_FOOTER = "Reply YES within 10 minutes to place this order. Reply CART to change it."
 SUMMARY_UPDATED = (
@@ -83,6 +85,86 @@ ORDER_STATUS_LABELS = {
     "expired": "expired",
     "refund_pending": "refund pending",
 }
+
+
+def order_placed(
+    reference: str,
+    *,
+    total_paisa: int,
+    payment_method: str,
+    payment_due_at: datetime | None,
+) -> str:
+    """A7: the confirmation, from the order as stored."""
+    lines = [
+        f"✅ Order #{reference} placed.",
+        f"Total: {format_rupees(total_paisa)} ({PAYMENT_LABELS[payment_method]}).",
+    ]
+    if payment_method == "transfer" and payment_due_at is not None:
+        lines += [
+            f"Please pay by {format_time(payment_due_at)}. "
+            "The restaurant's account details will follow here.",
+            f'Put "{reference}" in the payment reference if possible. Staff will confirm once '
+            "they see the payment in the restaurant's account. "
+            "A screenshot alone does not confirm payment.",
+        ]
+    else:
+        lines.append("The restaurant will confirm it here shortly.")
+    lines.append('Reply "status" anytime, or CANCEL to cancel before the restaurant accepts it.')
+    return "\n".join(lines)
+
+
+def open_order_kept(reference: str) -> str:
+    return (
+        f"{CART_CLEARED} Your order #{reference} is still placed; reply CANCEL again to cancel it."
+    )
+
+
+def cannot_cancel(reference: str, status: str) -> str:
+    if status == "paid_staff_verified":
+        return (
+            f"Your payment for order #{reference} is already verified, so staff need to cancel "
+            "it and arrange the refund. Reply 0 to talk to staff."
+        )
+    label = ORDER_STATUS_LABELS.get(status, status)
+    return (
+        f"Order #{reference} is {label}, so it can't be cancelled here. Reply 0 to talk to staff."
+    )
+
+
+def order_update(
+    reference: str, status: str, restaurant: str, *, reason: str | None, by_customer: bool
+) -> str | None:
+    """A8/A9: the message for an order that has just changed to `status`. None: no message
+    (being prepared follows "accepted" closely, so it isn't announced)."""
+    because = f" (reason: {reason})" if reason else ""
+    if status == "cancelled" and by_customer:
+        return f"Order #{reference} is cancelled. Reply MENU to start a new order."
+    return {
+        "paid_staff_verified": (
+            f"💳 Payment received for order #{reference} — verified by restaurant staff. Thank you!"
+        ),
+        "accepted": f"👨‍🍳 Order #{reference} accepted — being prepared.",
+        "out_for_delivery": f"🛵 Order #{reference} is out for delivery.",
+        "ready": f"✅ Order #{reference} is ready for pickup.",
+        "completed": f"✅ Order #{reference} completed. Shukriya! Reply MENU to order again.",
+        "rejected": (
+            f"Sorry, {restaurant} couldn't accept order #{reference}{because}. "
+            "No payment is needed. If you already transferred, reply 0 and staff will arrange "
+            "a refund."
+        ),
+        "cancelled": (
+            f"Sorry, {restaurant} cancelled order #{reference}{because}. "
+            "If you already paid, reply 0 and staff will help."
+        ),
+        "expired": (
+            f"We didn't receive payment for order #{reference} in time, so it was cancelled. "
+            "If you already paid, reply 0 and staff will check right away."
+        ),
+        "refund_pending": (
+            f"{restaurant} is arranging a refund for order #{reference}{because}. "
+            "Reply 0 if you have questions."
+        ),
+    }.get(status)
 
 
 def opted_out(restaurant: str) -> str:

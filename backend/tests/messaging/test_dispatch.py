@@ -56,6 +56,11 @@ def test_discovery_returns_only_tenants_with_due_work(run: Any, db: PgDatabase) 
         "SELECT * FROM velora.tenants",
         "SELECT * FROM velora.customers",
         "SELECT * FROM velora.orders",
+        # P7: it may see an order's status and payment_due_at, nothing more.
+        "SELECT delivery_address FROM velora.orders",
+        "SELECT total_paisa FROM velora.orders",
+        "SELECT customer_id FROM velora.orders",
+        "UPDATE velora.orders SET status = 'expired'",
         "SELECT * FROM velora.audit_log",
         "UPDATE velora.outbox_messages SET status = 'cancelled'",
         "INSERT INTO velora.global_pause_events (paused, reason, operator) VALUES (true, 'x', 'd')",

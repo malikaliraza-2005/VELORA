@@ -9,6 +9,7 @@ Exit criteria covered here:
 
 from __future__ import annotations
 
+import re
 from datetime import timedelta
 from typing import Any
 
@@ -88,8 +89,10 @@ def test_a_delivery_checkout_shows_database_prices_in_a_templated_summary(
         state, context, _, _ = customer.conversation()
         assert state == "summary"
         assert context["quote"]["total_paisa"] == total
-        # P7 creates the order; until then YES is answered honestly.
-        assert await customer.send("YES") == [copy.NOT_LIVE_YET]
+        # YES places the order (P7); the confirmation comes from the order transaction.
+        (placed,) = await customer.send("YES")
+        assert re.match(r"✅ Order #LS-\d{4} placed\.\n", placed)
+        assert f"Total: {format_rupees(total)} (Cash on delivery)." in placed
 
     run(scenario)
 
@@ -130,7 +133,8 @@ def test_an_expired_or_changed_summary_is_shown_again(run: Any, db: PgDatabase, 
         (changed,) = await customer.send("YES")
         assert changed.startswith(copy.SUMMARY_UPDATED)
         assert f"Delivery — {format_rupees(DELIVERY_FEE + 5000)}" in changed
-        assert await customer.send("YES") == [copy.NOT_LIVE_YET]
+        (placed,) = await customer.send("YES")
+        assert re.match(r"✅ Order #LS-\d{4} placed\.\n", placed)
 
     run(scenario)
 

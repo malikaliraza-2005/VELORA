@@ -26,6 +26,7 @@ from tests.api.conftest import (
     save_draft,
 )
 from tests.db.conftest import PgDatabase
+from tests.db.seed import insert_order
 from velora.app import create_app
 from velora.config import Settings
 from velora.db import TenantId
@@ -91,6 +92,15 @@ def _resume_bot(w: World) -> tuple[Device, httpx2.Response]:
         ).fetchone()
         assert found is not None
     return w.owner, w.owner.request("POST", f"/api/conversations/{found[0]}/resume")
+
+
+def _move_order(w: World) -> tuple[Device, httpx2.Response]:
+    """P7: staff accept a cash-on-delivery order."""
+    with w.db.admin() as conn:
+        order = insert_order(conn, w.tenant.value)
+    return w.owner, w.owner.request(
+        "POST", f"/api/orders/{order}/status", json={"from": "cod_confirmed", "to": "accepted"}
+    )
 
 
 CASES: dict[tuple[str, str], tuple[str, Case]] = {
@@ -173,6 +183,8 @@ CASES: dict[tuple[str, str], tuple[str, Case]] = {
         "conversation.bot_resumed",
         _resume_bot,
     ),
+    # P7: order lifecycle.
+    ("POST", "/api/orders/{order_id}/status"): ("order.status_changed", _move_order),
 }
 
 

@@ -4,8 +4,8 @@ Needs VELORA_DATABASE_URL (app_rw) and VELORA_DISPATCHER_DATABASE_URL (velora_di
 This is a composition root: it may import provider adapters through the registry.
 
 Inbound customer messages go to the conversation engine (P6), delivery receipts to the
-outbox. The AI proposer is optional (`VELORA_GROQ_API_KEY`); without it customers use the
-numbered menu.
+outbox. Order timers (P7) expire unpaid transfer orders. The AI proposer is optional
+(`VELORA_GROQ_API_KEY`); without it customers use the numbered menu.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from velora.messaging.dispatch import Dispatcher
 from velora.messaging.inbox import InboxProcessor
 from velora.messaging.outbox import OutboxSender, apply_delivery_status
 from velora.messaging.registry import build_providers
+from velora.orders.timers import OrderTimers
 from velora.redaction import configure_logging
 from velora.workers.runner import Worker
 
@@ -49,6 +50,7 @@ async def _run(settings: Settings, app_url: str, dispatcher_url: str) -> None:
             OutboxSender(db, providers, clock),
             ChannelMonitor(db, providers, clock),
             clock,
+            timers=OrderTimers(db, clock),
         )
         stop = asyncio.Event()
         if sys.platform != "win32":

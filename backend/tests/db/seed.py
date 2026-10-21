@@ -102,9 +102,17 @@ def seed_tenant(conn: psycopg.Connection[Any], slug: str, prefix: str) -> dict[s
         ids["pending_actions"] = action = _one(
             conn,
             "INSERT INTO velora.pending_actions "
-            "(tenant_id, conversation_id, kind, nonce_hash, payload, expires_at) "
-            "VALUES (%s, %s, 'confirm_order', %s, %s, %s) RETURNING id",
-            (t, conv, secrets.token_bytes(32), Jsonb({}), now + timedelta(minutes=15)),
+            "(tenant_id, conversation_id, customer_id, kind, nonce_hash, cart_hash, payload, "
+            "expires_at) VALUES (%s, %s, %s, 'confirm_order', %s, %s, %s, %s) RETURNING id",
+            (
+                t,
+                conv,
+                cust,
+                secrets.token_bytes(32),
+                secrets.token_bytes(32),
+                Jsonb({}),
+                now + timedelta(minutes=15),
+            ),
         )
         ids["orders"] = order = _one(
             conn,
@@ -204,3 +212,44 @@ def seed_tenant(conn: psycopg.Connection[Any], slug: str, prefix: str) -> dict[s
             (t, ch),
         )
     return ids
+
+
+def insert_order(
+    conn: psycopg.Connection[Any],
+    tenant_id: UUID,
+    *,
+    status: str = "cod_confirmed",
+    payment_method: str = "cod",
+    fulfilment: str = "delivery",
+    customer_id: UUID | None = None,
+    conversation_id: UUID | None = None,
+    payment_due_at: datetime | None = None,
+) -> UUID:
+    """An order in any status, written as the administrator (P7 tests). Creates a customer if
+    none is given. A transfer order awaiting payment gets a due time an hour from now."""
+    with conn.transaction():
+        conn.execute("SELECT set_config('app.tenant_id', %s, true)", (str(tenant_id),))
+        if customer_id is None:
+            customer_id = _one(
+                conn,
+                "INSERT INTO velora.customers (tenant_id, phone_e164) VALUES (%s, %s) RETURNING id",
+                (tenant_id, f"+92301{secrets.randbelow(10**7):07d}"),
+            )
+        if status == "awaiting_transfer" and payment_due_at is None:
+            payment_due_at = datetime.now(UTC) + timedelta(hours=1)
+        return _one(
+            conn,
+            "INSERT INTO velora.orders (tenant_id, order_number, customer_id, conversation_id, "
+            "status, fulfilment, payment_method, subtotal_paisa, total_paisa, payment_due_at) "
+            "VALUES (%s, velora.next_order_number(), %s, %s, %s, %s, %s, 90000, 90000, %s) "
+            "RETURNING id",
+            (
+                tenant_id,
+                customer_id,
+                conversation_id,
+                status,
+                fulfilment,
+                payment_method,
+                payment_due_at,
+            ),
+        )

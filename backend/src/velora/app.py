@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from psycopg_pool import AsyncConnectionPool
 
 from velora import __version__
-from velora.api import conversations, menu, ordering
+from velora.api import conversations, menu, ordering, orders
 from velora.api.deps import Services
 from velora.api.routes import router
 from velora.clock import Clock, SystemClock
@@ -32,6 +32,7 @@ from velora.identity.sessions import SessionService
 from velora.identity.staff import StaffService
 from velora.menu.service import MenuService
 from velora.ordering.service import OrderingService
+from velora.orders.service import OrderService
 
 # Per client address: 10 login attempts per 5 minutes.
 LOGIN_RATE_LIMIT = 10
@@ -54,6 +55,7 @@ def build_services(settings: Settings, database: Database, clock: Clock) -> Serv
         staff=StaffService(database, clock),
         menu=MenuService(database, clock),
         ordering=OrderingService(database, clock),
+        orders=OrderService(database, clock),
         conversations=ConversationService(database, clock),
         login_limiter=RateLimiter(LOGIN_RATE_LIMIT, LOGIN_RATE_WINDOW, clock),
     )
@@ -100,4 +102,5 @@ def create_app(
     app.include_router(menu.router)
     app.include_router(ordering.router)
     app.include_router(conversations.router)
+    app.include_router(orders.router)
     return app

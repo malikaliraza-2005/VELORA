@@ -469,6 +469,65 @@ Stop or pause the pilot on any of these:
   - **P11:** retention must also cover `conversations.context`, which holds delivery addresses.
 - **Evidence:** PR #7. CI run 39613089570 (652 tests). Migration 0008; tests in `backend/tests/conversation/`.
 
+### AD-31: P7 implementation choices (order lifecycle)
+- **Status:** ADOPTED (delegated), awaiting owner review. Built against the `FakeProvider` under AD-25.
+- **The YES nonce:**
+  - Showing the templated summary issues a `pending_actions` row: a random nonce, of which only the SHA-256 is stored.
+  - It is bound to the tenant (RLS), the conversation, the customer, and a hash of the exact checkout: lines, options, fulfilment, payment method, address, note and pickup time. It expires with the summary (10 minutes).
+  - A new summary voids the previous nonce (`superseded`), so at most one is open per chat. A unique index enforces this.
+  - Nonce expiry needs no timer: an expired nonce is refused when it is used.
+- **The order transaction:** YES runs these steps in a savepoint of the inbox transaction:
+  1. the nonce check;
+  2. the gate (global pause, restaurant status, channel, pause, menu, capacity);
+  3. re-pricing with `price_cart`, compared field by field with the summary's snapshot (menu version, every line, every amount);
+  4. single-use consumption of the nonce;
+  5. the capacity claim, the order number, the order with its snapshots, its lines (with chosen options) and its first transition;
+  6. the confirmation, queued in the outbox as a critical status update.
+  - If any step refuses or fails, nothing is kept.
+    - An expired or changed summary gives the customer the new summary to confirm (A7).
+    - A finished item gives the cart without it, then CHECKOUT again.
+    - A closed restaurant gives the A4 wording.
+    - An unexpected error gives an apology, and the same YES can be retried.
+  - For takeaway, the pickup lead time is counted from when the summary was shown, so a slot that was valid then is still accepted. The time must still be in the future.
+- **States and the transition table** (`velora.orders.lifecycle.TRANSITIONS`; migration 0009 enforces the same pairs in a trigger, and a test checks that the two agree):
+  - The customer's YES creates `cod_confirmed` (cash) or `awaiting_transfer`.
+    - `draft` and `awaiting_confirmation` stay in the schema but are unused: the summary and its nonce are the confirmation step.
+  - Staff: `cod_confirmed` → `accepted` / `rejected` / `cancelled`; `paid_staff_verified` → `accepted` / `refund_pending`; `accepted` → `preparing`; `preparing` → `out_for_delivery` (delivery) or `ready` (takeaway); either → `completed`; `refund_pending` → `cancelled`.
+  - After acceptance, a cash order can be `cancelled`, but a transfer order goes to `refund_pending`.
+  - Customer: `cancelled` from `cod_confirmed` or `awaiting_transfer` only, which is before acceptance and before verified payment.
+  - System: `awaiting_transfer` → `expired` when the transfer window passes.
+  - `awaiting_transfer` → `paid_staff_verified` is in the table, but the generic staff action refuses it. P8 sets it, with the transaction reference and the PIN.
+  - `expired` and `refund_pending` have no further customer moves. A late payment after expiry is P8's staff review.
+- **Guards:**
+  - Every move is `UPDATE … WHERE status = <the status read>`. Staff also send the status they saw, so a double tap or a second device gets 409.
+  - Every move writes an `order_transitions` row (now with a `seq` for ordering) and an `audit_log` row (`order.status_changed`). Creation writes `order.placed`.
+  - An order's amounts and snapshot columns can't change after creation (trigger). `order_items` are append-only.
+  - Staff must give a reason (200 characters at most) to reject, cancel or refund. The customer sees it.
+- **CANCEL:** while a cart, proposal or option choice is being built, CANCEL clears it, and the customer is told if an order is still open. With nothing being built, CANCEL cancels the latest open order, if the customer may cancel it. Otherwise the customer is told why and pointed to staff. CANCEL never opts out (AD-24).
+- **Capacity:** an order that ends unserved (rejected, cancelled, expired) before the kitchen starts gives its place back, but only if its slot is still the current one. Past slots keep their counts as history.
+- **Possible duplicates:** the same customer and cart hash within 10 minutes sets `possible_duplicate` for staff. Nothing is cancelled automatically.
+- **Status messages:**
+  - They are queued in the same transaction as the move, with purpose `status_update`, so they never go stale (A8, A9 wording). `preparing` has no message, because "accepted — being prepared" already says it.
+  - **Opted-out customers get no status messages.** STOP means no more messages from the assistant. The order is unaffected, and the customer can send START, then "status".
+- **Timers:** `OrderTimers` expires due transfer orders in the worker round, before the outbox, so the notice goes out in the same round.
+  - `velora_dispatcher` may now also read `orders(tenant_id, status, payment_due_at)` to find tenants with a window due.
+  - `payment_due_at` is a snapshot taken at placement (the transfer window then). P11 recovery may extend it.
+- **Recovery hook (P7-T7):** `velora.orders.recovery.expire_pre_outage` voids every open nonce created before the outage. Customers whose summary was still valid when the outage began get the A13 "confirm again" message. P11 calls it from recovery mode.
+- **Staff API:** `GET /api/orders` (active orders, or all), `GET /api/orders/{id}` (lines, history, allowed next moves) and `POST /api/orders/{id}/status` (`{from, to, reason}`). Viewing needs `ORDERS_VIEW`, moving needs `ORDERS_UPDATE`, which includes the shared kitchen device. The screens are P9.
+- **Transfer orders before P8:** the confirmation says the restaurant's account details "will follow here". Sending them is P8-T3, so transfer orders can't be used for real until P8.
+- **Findings for later phases:**
+  - **P8:**
+    - Verification sets `paid_staff_verified` (through `lifecycle.transition` with a staff actor, after the reference and PIN checks).
+    - Send the account details right after an `awaiting_transfer` order is placed.
+    - Decide late payments after `expired`.
+    - Decide whether `refund_pending` → `cancelled` should become a `refunded` state.
+    - The COD first-order limit counts any earlier order, including cancelled ones.
+  - **P9:** show `possible_duplicate`, the allowed next moves and the history. Show orders created during recovery (P11 step 9).
+  - **P11:**
+    - Recovery mode calls `expire_pre_outage`, and extends `payment_due_at` by the outage length (step 5).
+    - Retention must also cover `pending_actions.payload`, which holds the address.
+- **Evidence:** PR #9. CI run 39636189526 (702 tests). Migration 0009; tests in `backend/tests/orders/` and `backend/tests/api/test_orders.py`.
+
 ---
 
 ## 3. VALIDATION-DEPENDENT decisions (decided only after the OpenWA trial)
@@ -615,8 +674,9 @@ A few GB of dumps is probably **$0** on R2 or B2, depending on how long dumps ar
 
 ## 8. Items for owner review
 
-1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-30).** They stand unless you reverse them.
+1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-31).** They stand unless you reverse them.
    - **AD-30 needs a decision:** may Groq's free tier receive real customer messages? That would amend AD-04 (paid tier, no training), and Groq's training terms are unverified.
+   - **AD-31 asks you to confirm:** opted-out customers get no order status messages; a customer can cancel only before acceptance and before a verified payment.
 2. **The optional customer order-tracking link (§5).** Not approved.
 3. **The validation-dependent decisions V-01 to V-10.** These come back to you with the trial evidence.
 4. **The cost commitment.** Approve only after vendor checks and V-03.
