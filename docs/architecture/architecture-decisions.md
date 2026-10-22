@@ -1,6 +1,6 @@
 # VELORA architecture decisions
 
-- **Last updated:** 2026-10-21
+- **Last updated:** 2026-10-22
 - **Basis:**
   - The architecture review of the research documents (Critic / Defender / Independent Judge).
   - The owner decision session (A1–A12).
@@ -90,6 +90,7 @@ Facts change. Re-verify anything time-sensitive before relying on it.
 - **Rationale:** free database tiers have no backups and pause (F8). The planned free model is retired (F9). Order and payment records need recoverability.
 - **Alternatives:** self-hosted Postgres on the VPS (cheaper, but you own backups and recovery); free tiers (rejected for production data).
 - **Trade-offs:** about $40–75/mo before any revenue (see §6), in exchange for a large reliability gain.
+- **Amended by AD-35 (owner, 2026-10-22): zero cost.** A free VM with PostgreSQL on it and our own off-site backups replaces the paid managed database. Groq's free tier replaces the paid AI tier.
 
 ### AD-05: OpenWA is the intended MVP WhatsApp provider, behind a replaceable interface
 - **Decision:**
@@ -99,7 +100,7 @@ Facts change. Re-verify anything time-sensitive before relying on it.
   - **OpenWA is not claimed to be compliant, reliable or production-ready.**
 - **Approved:** owner decision on A7, plus the conditional approval (items 1, 3 and 7).
 - **Rationale (owner):** no Meta per-message fees (F1) and fast onboarding by QR scan.
-- **Risks the owner accepted, to be re-checked by the legal brief:**
+- **Risks the owner accepted** (the legal brief that was to re-check them was withdrawn by AD-35):
   - It operates outside the WhatsApp Terms of Service (F6).
   - Merchant numbers could be restricted or banned.
   - A WhatsApp Web change could break every restaurant at once.
@@ -131,6 +132,7 @@ Facts change. Re-verify anything time-sensitive before relying on it.
 ### AD-08: Lawyer and accountant
 - **Decision:** get quotes now, and brief a Pakistani tech/corporate lawyer and a tax accountant **before** paid customers. Under AD-05 the legal brief must also cover OpenWA's Terms-of-Service exposure and the consent wording **before any real merchant is connected**.
 - **Approved:** A8.
+- **WITHDRAWN by the owner (AD-35, 2026-10-22):** no lawyer or accountant. The owner accepts the risks listed in AD-35.
 
 ### AD-09: VELORA has its own database; Stock Flow is excluded
 - **Decision:** inventory and availability are an internal module of VELORA's own database.
@@ -139,6 +141,34 @@ Facts change. Re-verify anything time-sensitive before relying on it.
 
 ### AD-10: Research documents are inputs, not requirements
 - **Approved:** owner constraint. See [`../README.md`](../README.md#precedence).
+
+### AD-35: Zero-cost operation (amends AD-04, withdraws AD-08)
+- **Decision (owner, 2026-10-22):** "I want total zero cost approach." In the follow-up questions the owner chose a free cloud VM, kept the AI, and dropped the lawyer and accountant, accepting the risk.
+- **Approved:** owner, 2026-10-22.
+- **What it means, part by part:**
+  - **Server:** one always-on free cloud VM. Oracle Cloud "Always Free" is the candidate. *To verify before relying on it:* region (Mumbai or Hyderabad preferred), free capacity, the card check at signup (not charged), the terms for commercial use, and Oracle's policy of reclaiming idle free VMs.
+  - **Database:** PostgreSQL on that VM, not a managed service. VELORA owns the backups: **hourly encrypted dumps to free off-site storage** (Backblaze B2's free 10 GB is the candidate), restore drills in P11, and backup alerts from the P10 monitor. The §7 rejection of free *managed* database tiers still stands (no backups, pauses), and this design doesn't use them.
+  - **AI: Groq's free tier, for real customer messages.** This settles the open question in AD-30 in Groq's favour.
+    - *Risks the owner accepts:* Groq's training terms are unverified; free-tier rate limits are unverified.
+    - *Kept:* the minimised customer text; the numbered menu whenever the AI fails, times out or hits a limit; and the per-restaurant switch to turn the AI off.
+    - *Recommended, free:* switch on Zero Data Retention in Groq's Data Controls.
+    - *Private zero-cost alternative, if wanted later:* a small open model on the VM itself, so no customer text leaves our server. It is slower, and its Roman-Urdu accuracy is untested.
+  - **Monitoring (P10):** alerts by email through a free mailbox (e.g. Gmail with an app password), and a free external heartbeat or uptime check. **PC-11 (a paid uptime tier) is rejected.** The free tiers' terms for commercial use must be checked when choosing one.
+  - **Domain and HTTPS (P12):** a free subdomain with Let's Encrypt, or a free Cloudflare Tunnel.
+  - **WhatsApp:** OpenWA, unchanged (AD-05).
+- **AD-08 withdrawn.** No lawyer or accountant before connecting restaurants. **The owner accepts, without a professional opinion:**
+  - the WhatsApp Terms-of-Service exposure of OpenWA (F6): numbers may be banned, and the owner agreed not to create replacement accounts without permission;
+  - consent wording, merchant indemnity, data handling, and VELORA's role as data controller or processor;
+  - tax per payment method and invoice rules. **The owner sets each restaurant's tax rate from public sources** (F10: Punjab 8% card/digital, 16% cash, as of 1 Jul 2026). Until a rate is set, VELORA refuses to quote (B3).
+  - Engineering will draft the consent form from AD-18 and AD-24. **The draft is not legal advice.**
+- **Engineering lead's note:** zero cost moves cost into risk:
+  - a free VM has no service guarantee and may be reclaimed;
+  - backups and recovery are ours alone;
+  - customer messages go to a service whose training terms are unverified;
+  - nobody has checked the legal position.
+
+  The mitigations are the backups and restore drills (P11), the monitoring (P10), the stop rules (AD-22) and the global pause. **Not zero:** a one-off prepaid test SIM, and the owner's phone.
+- **Budget:** $0 a month. Nothing has been purchased.
 
 ### AD-25: Provider-neutral build track while the OpenWA test waits
 - **Decision:**
@@ -671,7 +701,7 @@ Stop or pause the pilot on any of these:
   - **No noise, nothing missed:** each problem is sent once, again when it grows (e.g. more dead letters) or every 4 hours while it lasts, and once when it clears. An alert that no notifier accepted is tried again after 5 minutes. `alert_events` records every notification, so a restarted monitor doesn't repeat open alerts.
   - **Delivery:** email (SMTP with TLS) and/or a JSON webhook to a push or SMS gateway. **Never WhatsApp**, which may be the thing that is down. Outside development, the monitor refuses to start without one, and only over https/TLS.
   - **External uptime:** the monitor pings a heartbeat URL every minute (a "dead man's switch"), so an external service notices when the monitor or the whole host stops. The same service, or an uptime checker on `/readyz`, also covers "kill the ingress" from outside.
-  - **Which vendor** (UptimeRobot, Healthchecks.io, an SMS gateway, an email provider) is **not chosen**. It is a cost decision (PC-11, §6.4). Any service that takes a JSON POST or an HTTP ping works.
+  - **Which service:** a free one (AD-35, zero cost). Email through a free mailbox, and a free heartbeat or uptime tier. Any service that takes a JSON POST or an HTTP ping works.
 - **Founder's dashboard (P10-T4): a command line, not a web screen**, as with the onboarding tools (AD-27).
   - `python -m velora.monitoring status` shows every metric and the alerts that would fire now. `daily` shows the pilot metrics per restaurant.
   - The loop also emails the previous day's metrics at 09:00 Pakistan time.
@@ -687,7 +717,7 @@ Stop or pause the pilot on any of these:
 - **Findings for later phases:**
   - **P5-T3:** the OpenWA webhook endpoint must call `Ingress.reject` for each refused webhook, or the HMAC-failure alert never fires.
   - **P11:** the backup job must call `python -m velora.monitoring record-backup` after each run. Set `VELORA_MONITOR_EXPECT_BACKUPS=true` once it runs.
-  - **P12:** run the monitor as its own container, with `VELORA_MONITOR_PROBE_URL` on the private network. Set up the heartbeat and an external `/readyz` check, and choose the alert vendor (PC-11).
+  - **P12:** run the monitor as its own container, with `VELORA_MONITOR_PROBE_URL` on the private network. Set up the heartbeat and an external `/readyz` check, and set up the free alert mailbox and heartbeat (AD-35).
 - **Evidence:** see "P10 task evidence" in the status tracker. Migration 0012; tests in `backend/tests/monitoring/` and `backend/tests/test_structured_logs.py`.
 
 ---
@@ -788,6 +818,8 @@ A few GB of dumps is probably **$0** on R2 or B2, depending on how long dumps ar
 - The final model is chosen by the Roman-Urdu accuracy evaluation (P0-E5), not by price alone.
 
 ### 6.6 Pilot monthly totals (estimates, not commitments)
+
+> **Owner decision AD-35 (2026-10-22): zero cost.** The plan is now **$0 a month**: a free VM, PostgreSQL on it, free off-site backup storage, Groq's free tier, and free monitoring. The scenarios below are kept for reference if paid services are ever reconsidered.
 | Scenario | Composition (example) | Estimate |
 |---|---|---|
 | Low | Small EU VPS (if Hetzner is available) + DO PG 1 GiB or Supabase Pro + R2/B2 free + free monitoring + cheap LLM | **~$27–45** |
@@ -837,11 +869,11 @@ A few GB of dumps is probably **$0** on R2 or B2, depending on how long dumps ar
 ## 8. Items for owner review
 
 1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-34).** They stand unless you reverse them.
-   - **AD-30 needs a decision:** may Groq's free tier receive real customer messages? That would amend AD-04 (paid tier, no training), and Groq's training terms are unverified.
+   - ~~**AD-30 needs a decision:** may Groq's free tier receive real customer messages?~~ **Decided by AD-35:** yes (zero cost). Switching on Zero Data Retention in Groq's Data Controls is recommended.
    - **AD-31 asks you to confirm:** opted-out customers get no order status messages; a customer can cancel only before acceptance and before a verified payment.
    - **AD-32 asks you to confirm:** the reconciliation report and payment reversal are owner-only (managers can't); a duplicate reference is refused rather than allowed with a warning; the COD first-order limit applies until a customer has a *completed* order; staff confirm the full order total (no partial payments).
    - **AD-33 asks you to confirm:** the dashboard is plain JavaScript with no build step; only the owner sees WhatsApp details and the QR re-link (managers see whether orders are being taken, not the QR); kitchen roles don't see the today summary; updates by polling every 5 seconds.
-   - **AD-34 asks you to confirm:** that "Start P10" meant the provider-neutral part before the Go (AD-25 listed P10 as gated); that the founder's dashboard is a command line plus a daily email, not a web page; and which alert vendor to pay for (PC-11).
+   - **AD-34 asks you to confirm:** that "Start P10" meant the provider-neutral part before the Go (AD-25 listed P10 as gated); that the founder's dashboard is a command line plus a daily email, not a web page; the alert vendor is now a free tier (AD-35).
 2. **The optional customer order-tracking link (§5).** Not approved.
 3. **The validation-dependent decisions V-01 to V-10.** These come back to you with the trial evidence.
 4. **The cost commitment.** Approve only after vendor checks and V-03.
@@ -869,6 +901,6 @@ These come from the OpenWA desk review ([validation plan §10](../planning/openw
 | PC-8 | V-07 (session backups) | Confirms the default: **don't back up the OpenWA volume off-site** (plaintext auth). Accept re-linking every session after a host loss, and document it in the P11 runbook. | §10.3 | PROPOSED |
 | PC-9 | AD-19 (hosting) | Choose a VPS and database **in the same region**, preferably Mumbai/Bangalore or Singapore. Hetzner's cheap plans are EU-only and were unavailable on 2026-10-21. | §6.1, §6.7 | PROPOSED; latency not measured |
 | PC-10 | AD-04 (AI model) | Candidates for the P0-E5 evaluation: Claude Haiku 5.5, gpt-4o-mini, Gemini 3.1 Flash-Lite, and Groq gpt-oss (training policy to verify). Drop Groq Llama 3.3 70B, which is now enterprise-only. | §6.5 | PROPOSED. Groq gpt-oss is the first adapter built (AD-30); the selection still needs the evaluation |
-| PC-11 | P10 (monitoring) | Budget for a paid uptime-monitoring tier (e.g. UptimeRobot Solo, $10/mo). The free tier is described as for hobby/non-profit use. | §6.4 | PROPOSED |
+| PC-11 | P10 (monitoring) | Budget for a paid uptime-monitoring tier (e.g. UptimeRobot Solo, $10/mo). The free tier is described as for hobby/non-profit use. | §6.4 | **REJECTED** by the owner (AD-35, zero cost) |
 | PC-12 | Validation plan | Add test T3.9 (passkey linking block, #560), the reconciliation, ID and send-idempotency tests, and the trial configuration baseline. | Validation plan §10.6 | PROPOSED |
 | PC-13 | Risk register | Record #560 (a passkey can block all device linking, no workaround) and #830 (first message to a new contact can silently fail) as **pilot risks**. #560 could also block re-linking after a disconnect. | §10.4–10.5 | PROPOSED |

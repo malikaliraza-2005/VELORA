@@ -104,8 +104,8 @@
 | S2 | Pilot restaurants accept a separate ordering number and the written risk consent | PENDING EXTERNAL (interviews) |
 | S3 | Kitchens have a phone or tablet with internet for the dashboard | PENDING EXTERNAL (interviews) |
 | S4 | Customers accept numbered text menus (no buttons) | Measured in the trial (T4.4) and the pilot |
-| S5 | A lawyer confirms the consent wording and data handling are acceptable before real merchants are connected | PENDING EXTERNAL |
-| S6 | Tax rules per payment method are confirmed by an accountant | PENDING EXTERNAL |
+| S5 | A lawyer confirms the consent wording and data handling are acceptable before real merchants are connected | **WITHDRAWN** by the owner (AD-35: zero cost, risk accepted) |
+| S6 | Tax rules per payment method are confirmed by an accountant | **WITHDRAWN** (AD-35): the owner sets rates from public sources |
 | S7 | The founder is available to onboard, verify owners and monitor during the pilot | ADOPTED (AD-12) |
 | S8 | A single VPS is acceptable for the pilot | ADOPTED (AD-19) |
 
