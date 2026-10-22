@@ -19,10 +19,17 @@ import pytest
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 ADAPTERS = "velora.messaging.providers"
-# The only modules allowed to wire adapters in: the registry and the two process entry points
-# (workers; the API, P9).
+# The only modules allowed to wire adapters in: the registry, the process entry points (workers;
+# the API, P9) and the local development tool.
 COMPOSITION_ROOTS = frozenset(
-    {"velora.messaging.registry", "velora.workers.__main__", "velora.asgi"}
+    {
+        "velora.messaging.registry",
+        "velora.workers.__main__",
+        "velora.asgi",
+        # Local development only: the demo restaurant's simulated customer.
+        "velora.dev.__main__",
+        "velora.dev.customer",
+    }
 )
 AI_ADAPTERS = "velora.ai.groq"
 AI_ROOTS = frozenset({"velora.ai.registry", "velora.ai.evaluate", "velora.workers.__main__"})

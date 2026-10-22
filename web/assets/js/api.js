@@ -95,8 +95,10 @@ export async function request(method, path, body, { key } = {}) {
     throw new OfflineError();
   }
   setConnection({ reachable: true });
+  // A 204 answer may still say it is JSON, with no body to parse.
   const type = response.headers.get("content-type") || "";
-  const data = type.includes("application/json") ? await response.json() : null;
+  const text = await response.text();
+  const data = text && type.includes("application/json") ? JSON.parse(text) : null;
   if (response.status === 401 && path !== "/api/auth/login") {
     onSignedOut();
     throw new SignedOutError();

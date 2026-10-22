@@ -8,7 +8,7 @@ VELORA is a Pakistan-first, WhatsApp-based ordering SaaS for restaurants and clo
 docs/
 ├── research/       Research inputs (NotebookLM-generated). NOT approved requirements.
 ├── architecture/   Recorded architecture decisions, with status for each.
-├── planning/       MVP scope, implementation plan (master roadmap), status tracker, OpenWA validation plan.
+├── planning/       MVP scope, implementation plan (master roadmap), status tracker, OpenWA validation plan, local testing guide.
 │   └── phases/     One detailed task file per phase, P0–P13.
 └── README.md       This file.
 ```
@@ -17,7 +17,7 @@ docs/
 |---|---|---|
 | `research/` | 17 research documents (01–15, 17, 18) produced with NotebookLM before the architecture review. | **Input only.** Many claims were found to be outdated, unverified or contradictory during the review. Labels such as "Status: Approved" and "Verified Facts" inside these files are part of the original research output and **do not** mean the owner approved them. |
 | `architecture/` | [`architecture-decisions.md`](architecture/architecture-decisions.md): every major decision with its rationale, alternatives, trade-offs and status. | **Authoritative** for anything marked APPROVED. Items marked ADOPTED (delegated) are authoritative but can be reversed by the owner. |
-| `planning/` | [`mvp-scope.md`](planning/mvp-scope.md), [`implementation-plan.md`](planning/implementation-plan.md) (master roadmap), [`implementation-status.md`](planning/implementation-status.md), [`openwa-validation-plan.md`](planning/openwa-validation-plan.md) | Authoritative plan, derived from the decisions. |
+| `planning/` | [`mvp-scope.md`](planning/mvp-scope.md), [`implementation-plan.md`](planning/implementation-plan.md) (master roadmap), [`implementation-status.md`](planning/implementation-status.md), [`openwa-validation-plan.md`](planning/openwa-validation-plan.md), [`local-testing-guide.md`](planning/local-testing-guide.md) (try it by hand) | Authoritative plan, derived from the decisions. |
 | `planning/phases/` | `p00-…md` to `p13-…md`: detailed tasks for each phase, each with prerequisites, deliverables, security, tests, acceptance criteria and rollback | Authoritative task detail. **Status is tracked only in `implementation-status.md`.** |
 
 ## Precedence
