@@ -630,7 +630,7 @@ Stop or pause the pilot on any of these:
   - **P10:** alert on `failed` and `unknown` messages (the dashboard only lists them).
   - **P12:** run `velora.asgi:app` behind TLS with HSTS, and trust proxy headers so the login rate limit is per client (P3 finding).
   - **P13:** the usability check with real kitchen staff (P9-T8), and the end-to-end staging run with a test number.
-- **Evidence:** PR #12 (feature). Migration 0011; tests in `backend/tests/api/test_dashboard.py` and `backend/tests/web/`.
+- **Evidence:** PR #12. CI run 39775329133 (810 tests). Migration 0011; tests in `backend/tests/api/test_dashboard.py` and `backend/tests/web/`.
 
 ---
 
