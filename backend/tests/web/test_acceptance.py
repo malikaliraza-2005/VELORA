@@ -165,6 +165,14 @@ def test_payment_received_needs_the_reference_and_the_pin(
         db, "SELECT status, reference FROM velora.payments WHERE order_id = %s", order
     ) == [("verified", "FT 2026 0001")]
 
+    # A paid order can be accepted or refunded; the refund asks why (the customer is told).
+    card = _card(owner, order)
+    labels = card.locator(".actions button").all_inner_texts()
+    assert labels == ["Payment", "Accept", "Refund"], labels
+    card.get_by_role("button", name="Refund").click()
+    expect(owner.locator(".dialog input[name=reason]")).to_be_visible()
+    owner.keyboard.press("Escape")
+
 
 def test_kitchen_tablet_names_the_confirmer(
     context: BrowserContext, shop: Shop, db: PgDatabase

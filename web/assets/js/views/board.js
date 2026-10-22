@@ -17,7 +17,8 @@ const COLUMNS = [
   { id: "done", title: "Done today", statuses: ["completed", "cancelled", "rejected", "expired"] },
 ];
 const NEW = new Set(COLUMNS[0].statuses);
-const NEEDS_REASON = new Set(["rejected", "cancelled"]);
+// The customer is told why (lifecycle.REASON_REQUIRED).
+const NEEDS_REASON = new Set(["rejected", "cancelled", "refund_pending"]);
 
 export default {
   id: "board",
