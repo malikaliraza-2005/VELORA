@@ -85,6 +85,20 @@ class StaffService:
             )
             return [_member(row) for row in await cur.fetchall()]
 
+    async def confirmers(self, actor: StaffSession) -> list[StaffMember]:
+        """Who can confirm a payment with their PIN: the picker on a shared kitchen device
+        (P9-T3). Names only; anyone who can act on orders may see them."""
+        _require(actor, Permission.ORDERS_UPDATE)
+        roles = sorted(r.value for r in Role if allows(r, Permission.PAYMENTS_CONFIRM))
+        async with self._db.tenant(actor.tenant) as conn:
+            cur = await conn.execute(
+                "SELECT id, display_name, role, active, pin_hash IS NOT NULL "
+                "FROM velora.staff_members WHERE active AND pin_hash IS NOT NULL "
+                "AND role = ANY(%s) ORDER BY display_name, id",
+                (roles,),
+            )
+            return [_member(row) for row in await cur.fetchall()]
+
     async def _get(self, conn: AsyncConnection[Any], staff_id: uuid.UUID) -> StaffMember:
         cur = await conn.execute(
             "SELECT id, display_name, role, active, pin_hash IS NOT NULL "

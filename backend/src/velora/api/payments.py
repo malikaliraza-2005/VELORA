@@ -7,6 +7,8 @@
   `PAYMENTS_CONFIRM`). A shared kitchen device names the confirmer.
 - `POST /api/payments/{id}/reverse` and `GET /api/payments/reconciliation`: owner only.
 - `PUT` / `DELETE /api/customers/{id}/cod-block`: the COD blocklist.
+- `GET /api/payments/confirmers`: who may confirm with a PIN, for the kitchen tablet's picker
+  (`ORDERS_UPDATE`; P9-T3).
 
 Every change is audited.
 """
@@ -33,6 +35,11 @@ OrdersUpdater = Annotated[StaffSession, Depends(require(Permission.ORDERS_UPDATE
 Reconciler = Annotated[StaffSession, Depends(require(Permission.PAYMENTS_RECONCILE))]
 Reverser = Annotated[StaffSession, Depends(require(Permission.PAYMENTS_REVERSE))]
 CodBlocker = Annotated[StaffSession, Depends(require(Permission.CUSTOMERS_BLOCK_COD))]
+
+
+class ConfirmerOut(BaseModel):
+    id: uuid.UUID
+    display_name: str
 
 
 class LedgerEntryOut(BaseModel):
@@ -171,6 +178,12 @@ async def reverse_payment(
     return _out(
         await services.payments.reverse(session, payment_id, pin=body.pin, reason=body.reason)
     )
+
+
+@router.get("/payments/confirmers")
+async def confirmers(session: OrdersUpdater, services: ServicesDep) -> list[ConfirmerOut]:
+    found = await services.staff.confirmers(session)
+    return [ConfirmerOut(id=m.id, display_name=m.display_name) for m in found]
 
 
 @router.get("/payments/reconciliation")

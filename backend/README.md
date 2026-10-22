@@ -50,6 +50,18 @@ uv run pytest
 Each session creates the roles with random passwords and migrates a uniquely named database,
 which is then dropped. Use a throwaway server: the roles are cluster-wide.
 
+### Dashboard browser tests (P9)
+
+`tests/web/` drives headless Chromium (Playwright) against the real app, served by uvicorn on
+the test database. Install the browser once:
+
+```bash
+uv run playwright install chromium
+```
+
+Without it the browser tests are skipped (CI sets `VELORA_REQUIRE_BROWSER_TESTS=1`, so there
+they fail instead).
+
 ## Staff identity (P3)
 
 - `src/velora/identity/`: magic links and device sessions (`sessions.py`), staff management and payment PINs (`staff.py`), the role-permission matrix (`permissions.py`) and audit writes (`audit.py`).

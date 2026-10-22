@@ -2,6 +2,7 @@ name: CI
 
 # P1-T5: lint, type checks, tests and a secret scan on every push and pull request.
 # P2-T6: the tests include the tenant-isolation suite, run against PostgreSQL.
+# P9: and the staff dashboard's browser tests, in headless Chromium.
 on:
   push:
   pull_request:
@@ -41,10 +42,14 @@ jobs:
           done
           docker exec velora-pg pg_isready -h 127.0.0.1 -U postgres
           echo "VELORA_TEST_ADMIN_URL=postgresql://postgres:$pw@127.0.0.1:5432/postgres" >> "$GITHUB_ENV"
+      # P9: the dashboard tests drive headless Chromium (Playwright, version from uv.lock).
+      - name: Install Chromium for the dashboard tests
+        run: uv run playwright install --with-deps chromium
       - name: Tests
         env:
-          # Fail, rather than skip, if the database tests cannot run.
+          # Fail, rather than skip, if the database or browser tests cannot run.
           VELORA_REQUIRE_DB_TESTS: "1"
+          VELORA_REQUIRE_BROWSER_TESTS: "1"
           VELORA_TEST_PG_TOOLS: docker exec -i velora-pg
         run: uv run pytest
 

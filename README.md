@@ -2,7 +2,7 @@
 
 Pakistan-first, WhatsApp-based ordering SaaS for restaurants and cloud kitchens (hotels later).
 
-> **Project status:** early build. P1–P4 are complete (repository, database and tenant isolation, staff identity, menu and ordering settings). P5's provider-neutral messaging core is complete; the OpenWA adapter is blocked until the live validation Go.
+> **Project status:** early build. P1–P4 are complete (repository, database and tenant isolation, staff identity, menu and ordering settings). The provider-neutral parts of P5–P9 are built against simulated WhatsApp: messaging core, conversations, order lifecycle, payment verification and the staff dashboard. The OpenWA adapter is blocked until the live validation Go.
 > Nothing connects to WhatsApp yet.
 > See [`docs/planning/implementation-status.md`](docs/planning/implementation-status.md).
 
@@ -11,7 +11,7 @@ Pakistan-first, WhatsApp-based ordering SaaS for restaurants and cloud kitchens 
 | Path | Purpose |
 |---|---|
 | `backend/` | Python 3.12 + FastAPI: webhook ingress and background workers |
-| `web/` | Staff dashboard (PWA). Built in P9 |
+| `web/` | Staff dashboard (installable PWA, plain JavaScript, no build step). Built in P9 |
 | `infra/` | Deployment and containers. Built in P12 |
 | `docs/` | Research inputs, architecture decisions and planning. Start at [`docs/README.md`](docs/README.md) |
 | `.github/workflows/ci.yml` | CI: format, lint, type check, tests, secret scan |

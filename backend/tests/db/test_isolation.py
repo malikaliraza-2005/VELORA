@@ -50,6 +50,8 @@ TENANT_TABLES: dict[str, str] = {
     "menu_item_availability": "tenant_id",
     "ordering_settings": "tenant_id",
     "order_capacity_slots": "tenant_id",
+    # P9: dashboard idempotency keys.
+    "idempotency_keys": "tenant_id",
 }
 
 # Tables in the velora schema that are deliberately global (no tenant). Each needs a reason.

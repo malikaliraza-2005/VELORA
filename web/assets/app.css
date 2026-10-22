@@ -1,0 +1,145 @@
+/* VELORA staff dashboard. Built for kitchen tablets: large tap targets, high contrast. */
+
+:root {
+  --bg: #f6f7f5;
+  --card: #ffffff;
+  --ink: #1d2320;
+  --muted: #5d6763;
+  --line: #d9dedb;
+  --brand: #0f5132;
+  --brand-ink: #ffffff;
+  --warn: #8a5300;
+  --warn-bg: #fff4d6;
+  --error: #9b1c1c;
+  --error-bg: #fde8e8;
+  --ok: #0f5132;
+  --new: #0b4f9c;
+  --new-bg: #e3efff;
+  --radius: 10px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 17px;
+  color: var(--ink);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); line-height: 1.4; }
+body.offline .actions button, body.offline form button[type="submit"] { opacity: 0.5; }
+h1 { font-size: 1.4rem; margin: 0 0 0.6rem; }
+h2 { font-size: 1.15rem; margin: 0 0 0.5rem; }
+h3 { font-size: 1rem; margin: 1rem 0 0.4rem; }
+a { color: var(--brand); }
+[hidden] { display: none !important; }
+
+.top { display: flex; align-items: center; gap: 1rem; padding: 0.6rem 1rem; background: var(--brand); color: var(--brand-ink); }
+.brand { font-weight: 700; letter-spacing: 0.08em; }
+.who { flex: 1; opacity: 0.9; font-size: 0.9rem; }
+.top .ghost { color: var(--brand-ink); border-color: rgba(255, 255, 255, 0.5); }
+
+.nav { display: flex; gap: 0.25rem; overflow-x: auto; padding: 0.4rem 0.75rem; background: var(--card); border-bottom: 1px solid var(--line); }
+.nav a { padding: 0.6rem 0.9rem; border-radius: var(--radius); text-decoration: none; color: var(--ink); white-space: nowrap; }
+.nav a.active { background: var(--brand); color: var(--brand-ink); }
+
+.banner { padding: 0.7rem 1rem; font-weight: 600; }
+.banner-error { background: var(--error-bg); color: var(--error); }
+.banner-warn { background: var(--warn-bg); color: var(--warn); }
+.banner-new { background: var(--new-bg); color: var(--new); font-size: 1.1rem; }
+
+.content { padding: 1rem; max-width: 1500px; margin: 0 auto; }
+.centre { display: grid; place-items: center; min-height: 100vh; padding: 1rem; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem; margin-bottom: 1rem; }
+.narrow { max-width: 30rem; }
+.muted { color: var(--muted); }
+.empty { color: var(--muted); font-style: italic; }
+.ok { color: var(--ok); font-weight: 600; }
+.warn { color: var(--warn); font-weight: 600; }
+.form-error { color: var(--error); font-weight: 600; min-height: 1em; margin: 0.4rem 0; }
+
+button { font: inherit; min-height: 44px; padding: 0.5rem 1rem; border-radius: var(--radius); border: 1px solid transparent; cursor: pointer; }
+button:disabled { opacity: 0.5; cursor: wait; }
+button.primary { background: var(--brand); color: var(--brand-ink); }
+button.secondary { background: var(--card); color: var(--brand); border-color: var(--brand); }
+button.danger { background: var(--card); color: var(--error); border-color: var(--error); }
+button.ghost { background: transparent; border-color: var(--line); color: inherit; min-height: 36px; }
+button.link { background: none; border: none; color: var(--brand); text-decoration: underline; padding: 0.2rem 0; min-height: 0; }
+
+.form { display: grid; gap: 0.6rem; max-width: 34rem; }
+.field { display: grid; gap: 0.2rem; }
+.field-label { font-weight: 600; font-size: 0.95rem; }
+.field-hint { color: var(--muted); font-size: 0.85rem; }
+input, select, textarea { font: inherit; padding: 0.55rem 0.65rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; min-height: 44px; width: 100%; }
+input[type="checkbox"] { width: 28px; min-height: 28px; }
+input.pin { letter-spacing: 0.3em; max-width: 12rem; }
+.link-url { margin-bottom: 0.5rem; }
+
+.badge { display: inline-block; margin-left: 0.4rem; padding: 0 0.5rem; border-radius: 999px; background: var(--error); color: #fff; font-size: 0.8rem; }
+.badge-warn { background: var(--warn); }
+
+/* Order board */
+.board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; align-items: start; }
+.column { background: #eceeec; border-radius: var(--radius); padding: 0.6rem; min-height: 50vh; }
+.column h2 { display: flex; justify-content: space-between; }
+.count { color: var(--muted); }
+.order { background: var(--card); border: 1px solid var(--line); border-left: 6px solid var(--line); border-radius: var(--radius); padding: 0.7rem; margin-bottom: 0.6rem; }
+.order header { display: flex; justify-content: space-between; align-items: baseline; }
+.order .ref { font-size: 1.2rem; }
+.order .when { color: var(--muted); font-size: 0.85rem; }
+.order .status-line { font-weight: 600; margin: 0.2rem 0; }
+.order .meta, .order .address, .order .note, .order .phone { font-size: 0.92rem; }
+.order .lines { margin: 0.4rem 0; padding-left: 1.2rem; }
+.order .choices { color: var(--muted); }
+.order .flag { background: var(--warn-bg); color: var(--warn); padding: 0.3rem 0.5rem; border-radius: 6px; font-weight: 600; margin: 0.3rem 0; }
+.order .actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+.status-cod_confirmed, .status-paid_staff_verified { border-left-color: var(--new); }
+.status-awaiting_transfer, .status-refund_pending { border-left-color: var(--warn); }
+.status-accepted, .status-preparing { border-left-color: #6b4fbb; }
+.status-ready, .status-out_for_delivery { border-left-color: var(--ok); }
+.status-cancelled, .status-rejected, .status-expired { opacity: 0.7; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.list { list-style: none; padding: 0; margin: 0; }
+.list > li { padding: 0.6rem 0; border-bottom: 1px solid var(--line); }
+.list > li.inactive, .list > li.sold-out { color: var(--muted); }
+
+/* Chats */
+.chats { display: grid; grid-template-columns: minmax(16rem, 1fr) 2fr; gap: 1rem; }
+.chat-pick { width: 100%; text-align: left; background: none; border-color: var(--line); }
+.chat-pick.active { border-color: var(--brand); background: #eef6f1; }
+.messages { list-style: none; padding: 0; max-height: 50vh; overflow-y: auto; display: grid; gap: 0.4rem; }
+.msg { max-width: 80%; padding: 0.45rem 0.7rem; border-radius: 12px; display: grid; }
+.msg-in { background: #eceeec; justify-self: start; }
+.msg-out { background: #dcf3e4; justify-self: end; }
+.msg-text { white-space: pre-wrap; word-break: break-word; }
+.msg-meta { font-size: 0.75rem; color: var(--muted); }
+.problem-failed strong { color: var(--error); }
+.problem-unknown strong { color: var(--warn); }
+
+/* Dialogs and toasts */
+.overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: grid; place-items: center; padding: 1rem; z-index: 10; }
+.dialog { background: var(--card); border-radius: var(--radius); padding: 1rem; width: min(36rem, 100%); max-height: 90vh; overflow-y: auto; }
+.dialog-head { display: flex; justify-content: space-between; align-items: center; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 0.2rem 1rem; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; font-weight: 600; }
+#toasts { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); display: grid; gap: 0.5rem; z-index: 20; width: min(36rem, calc(100% - 2rem)); }
+.toast { padding: 0.75rem 1rem; border-radius: var(--radius); font-weight: 600; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2); }
+.toast-ok { background: var(--brand); color: var(--brand-ink); }
+.toast-error { background: var(--error); color: #fff; }
+
+/* Summary, report, WhatsApp */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.6rem; margin: 0.6rem 0; }
+.tile { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.7rem; }
+.tile-value { font-size: 1.5rem; font-weight: 700; }
+.tile-label { color: var(--muted); font-size: 0.9rem; }
+.table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.table th, .table td { text-align: left; padding: 0.4rem; border-bottom: 1px solid var(--line); }
+.table tr.reversed td { color: var(--muted); text-decoration: line-through; }
+.table tr.reversed td:last-child { text-decoration: none; }
+.qr { margin: 1rem 0; }
+.qr img { background: #fff; padding: 8px; border: 1px solid var(--line); }
+.refusal { border-color: var(--error); }
+
+@media (max-width: 900px) {
+  .board { grid-template-columns: 1fr; }
+  .column { min-height: 0; }
+  .chats { grid-template-columns: 1fr; }
+}

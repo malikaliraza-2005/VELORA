@@ -4,7 +4,8 @@ Every privileged endpoint names the permission it needs; nothing checks roles di
 endpoints (P4) must require `MENU_EDIT`, payment confirmation (P8) `PAYMENTS_CONFIRM`.
 
 The payment reconciliation report and the reversal of a verified payment are the owner's
-alone (P8-T6): they are the check on everyone else's confirmations.
+alone (P8-T6): they are the check on everyone else's confirmations. So is re-linking the
+WhatsApp number (P9-T6): a pairing QR code gives control of the restaurant's ordering number.
 """
 
 from __future__ import annotations
@@ -33,13 +34,22 @@ class Permission(StrEnum):
     CUSTOMERS_BLOCK_COD = "customers.block_cod"
     MENU_EDIT = "menu.edit"
     SETTINGS_EDIT = "settings.edit"
+    # P9-T6: the WhatsApp channel's status details and QR re-link. Owner only.
+    CHANNELS_MANAGE = "channels.manage"
+    # P9-T5: the today summary (takings). Kitchen roles see only the order board.
+    REPORTS_VIEW = "reports.view"
     STAFF_VIEW = "staff.view"
     # AD-12: staff are added only by owner invite.
     STAFF_MANAGE = "staff.manage"
 
 
 OWNER_ONLY: frozenset[Permission] = frozenset(
-    {Permission.STAFF_MANAGE, Permission.PAYMENTS_RECONCILE, Permission.PAYMENTS_REVERSE}
+    {
+        Permission.STAFF_MANAGE,
+        Permission.PAYMENTS_RECONCILE,
+        Permission.PAYMENTS_REVERSE,
+        Permission.CHANNELS_MANAGE,
+    }
 )
 
 MATRIX: dict[Role, frozenset[Permission]] = {

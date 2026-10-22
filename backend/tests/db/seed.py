@@ -218,6 +218,14 @@ def seed_tenant(conn: psycopg.Connection[Any], slug: str, prefix: str) -> dict[s
             "VALUES (%s, %s, 'connected') RETURNING id",
             (t, ch),
         )
+        # P9: one completed dashboard request.
+        ids["idempotency_keys"] = _one(
+            conn,
+            "INSERT INTO velora.idempotency_keys (tenant_id, session_id, key, fingerprint, "
+            "state, response_status, created_at, completed_at) "
+            "VALUES (%s, %s, %s, %s, 'done', 200, %s, %s) RETURNING id",
+            (t, ids["staff_sessions"], secrets.token_hex(16), secrets.token_bytes(32), now, now),
+        )
     return ids
 
 
