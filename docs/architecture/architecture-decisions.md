@@ -575,6 +575,63 @@ Stop or pause the pilot on any of these:
   - **P13:** each restaurant enters its account details before transfer is offered.
 - **Evidence:** PR #10. CI run 39641355254 (761 tests). Migration 0010; tests in `backend/tests/api/test_payments.py`, `backend/tests/payments/`, `backend/tests/db/test_payments_ledger.py` and `backend/tests/test_paid_writers.py`.
 
+### AD-33: P9 implementation choices (staff dashboard)
+- **Status:** ADOPTED (delegated), awaiting owner review. Built against the `FakeProvider` under AD-25. It implements AD-02 (approved), AD-03 (approved), AD-20 and AD-23.
+- **Frontend stack: plain JavaScript modules, no build step, served by the API from the same origin.**
+  - The dashboard is the files in `web/`, with no framework, bundler or npm packages. FastAPI serves them (`/`, `/login`, `/assets/*`, `/sw.js`, `/manifest.webmanifest`).
+  - *Why:* no JavaScript supply chain to audit or patch, nothing to build in CI or on the server, and a same-origin app needs no CORS or cookie exceptions (the session cookie stays SameSite=Strict and HttpOnly).
+  - *Trade-off:* hand-written rendering instead of a framework's. It is fine at this size (about ten screens). If the dashboard grows a lot, a framework such as Preact can be added later behind the same API.
+  - *Alternative:* React or Preact with Vite and TypeScript. It needs Node in CI and a build step, and adds dependencies.
+- **Installable PWA:** a web manifest with icons, and a service worker that caches **only the app's own files**. It never touches `/api/`: no order, chat or customer data is cached, and no action is stored to send later.
+- **Security headers on every response:**
+  - a Content Security Policy that allows only this origin, with no inline script or style;
+  - **Trusted Types required**, so script can't write HTML strings into the page. One policy (`velora`) allows exactly one script URL, the service worker;
+  - no framing, no referrer;
+  - `Cache-Control: no-store` on the API.
+  - The code builds every element with DOM calls; nothing a customer typed can become markup. A test fails if the code uses `innerHTML`, `eval`, `localStorage` and the like.
+  - *Not done here:* HSTS and TLS belong to the reverse proxy (P12).
+- **No secrets in the browser:**
+  - the session is the HttpOnly cookie;
+  - the CSRF token lives only in memory, fetched from `/api/me`;
+  - the login token is read from the URL fragment and removed from the address bar and history before it is posted.
+  - A browser test checks that local and session storage, IndexedDB and the service-worker cache hold no token and no API response.
+- **Idempotency keys on every action (AD-20), migration 0011:**
+  - Every state-changing request from a signed-in session must carry `Idempotency-Key` (16 to 100 characters); without it, 428.
+  - The first request with a key runs. A repeat gets the first response's status with `Idempotent-Replayed: true`, and changes nothing. While the first is still running a repeat gets 409; a key reused for a different request gets 422.
+  - A failed action (not 2xx) frees its key, because nothing was done.
+  - The dashboard makes one key per action button and keeps it while the button is on screen, so a double tap or a retry after a lost answer makes one change.
+  - Keys are per session, kept 24 hours, and store **only the status, never a response body**, so no customer data or login link is copied into the table.
+  - *Trade-off:* the key and the action commit in separate transactions. If recording success fails after the action committed, a retry after 2 minutes could run the action again. Every action that matters has its own guard as well: order moves name the `from` status, payments need `awaiting_transfer` and a unique reference, and outbox messages have their own key.
+- **Live updates by polling** every 5 seconds: the active orders, today's finished orders, the ordering status, and (by role) the handoff count and channel state.
+  - *Why:* simple and robust behind any proxy, and it needs no long-lived connections from the database pool. The load is small at pilot scale (a few devices per restaurant).
+  - *Alternative:* server-sent events. They can be added later if polling load matters.
+- **Offline behaviour (P9-T7):** when the browser goes offline or a poll fails, a "Connection lost" banner appears, and every action is refused at once with a visible message. Nothing is queued, and the service worker never replays requests.
+- **New-order alert:** a banner naming the new orders, plus a two-tone beep once "Sound on" has been tapped (browsers allow audio only after a tap).
+- **Two new permissions:**
+  - **`channels.manage`, owner only:** WhatsApp status details and QR re-link. A pairing QR code gives control of the ordering number. Other staff see only whether orders are being taken, and why not (`/api/ordering/status`, e.g. "WhatsApp is disconnected — tell the owner").
+  - **`reports.view`, owner and manager:** the today summary (takings). Kitchen roles see only the order board.
+- **QR re-link (P9-T6):**
+  - `POST /api/channels/{id}/relink` asks the provider to start pairing and records the state it reports (`source = relink`). It is audited.
+  - `GET /api/channels/{id}/qr.svg` renders the provider's QR code as an SVG image on the server, sent `no-store`. The code never passes through the page's script and is never logged, audited or stored. The renderer is `segno`, a small pure-Python QR library with no dependencies of its own.
+  - Once the phone has scanned it, the provider reports `connected` (webhook or health poll), orders reopen (P5 circuit breaker), and the banner clears at the next poll.
+  - The API is given its provider adapters by a new composition root, `velora.asgi` (`uvicorn velora.asgi:app`). A channel whose adapter isn't running (OpenWA until the Go) can't be re-linked from the dashboard, and says so.
+- **Chats (P9-T4):** the handoff inbox, a chat's last 50 messages both ways (from the inbox and outbox), and staff replies.
+  - A reply goes through the outbox like any other message, only while the chat is handed over and the customer hasn't opted out (409 otherwise). It is audited with its length, not its words.
+  - The same screen lists outbound messages from the last day that `failed` or whose delivery is `unknown` (P5 finding). They are never re-sent automatically.
+- **Payments (P9-T3):**
+  - The panel asks for the reference and the PIN, and refuses to send without either. On a shared kitchen tablet the confirmer picks their name from `GET /api/payments/confirmers` (people who can confirm and have a PIN; names only).
+  - Customer evidence is listed. Viewing images waits for the real adapter (P5-T2).
+  - A "Payments" screen lists expired transfer orders from the last 7 days (`GET /api/orders/late-payments`, with their evidence count) for the late review, and shows the owner's daily report with reversal.
+- **Today summary (P9-T5):** `GET /api/summary/today?day=` counts the orders placed that Pakistan day by outcome, the completed sales by payment method, the net transfers verified, and the chats waiting.
+- **Menu, controls, settings and staff (P9-T5):** the existing P3 and P4 endpoints and permissions, unchanged. A test checks that every API path the dashboard calls exists. Menu editing stays with the CSV import and publishing (P4); the dashboard toggles availability.
+- **Browser tests:** Playwright drives headless Chromium against the real app (uvicorn) and the test database, with the `FakeProvider` as WhatsApp. CI installs Chromium and fails, rather than skips, if it can't run them (`VELORA_REQUIRE_BROWSER_TESTS=1`). `uvicorn` and `playwright` are development dependencies only; the production server is P12.
+- **Findings for later phases:**
+  - **P5-T2:** fetching evidence images for staff; the OpenWA adapter's `get_qr` returns the pairing code as text for the API to render (or the adapter decodes an image the gateway gives).
+  - **P10:** alert on `failed` and `unknown` messages (the dashboard only lists them).
+  - **P12:** run `velora.asgi:app` behind TLS with HSTS, and trust proxy headers so the login rate limit is per client (P3 finding).
+  - **P13:** the usability check with real kitchen staff (P9-T8), and the end-to-end staging run with a test number.
+- **Evidence:** PR #12 (feature). Migration 0011; tests in `backend/tests/api/test_dashboard.py` and `backend/tests/web/`.
+
 ---
 
 ## 3. VALIDATION-DEPENDENT decisions (decided only after the OpenWA trial)
@@ -721,10 +778,11 @@ A few GB of dumps is probably **$0** on R2 or B2, depending on how long dumps ar
 
 ## 8. Items for owner review
 
-1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-32).** They stand unless you reverse them.
+1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-33).** They stand unless you reverse them.
    - **AD-30 needs a decision:** may Groq's free tier receive real customer messages? That would amend AD-04 (paid tier, no training), and Groq's training terms are unverified.
    - **AD-31 asks you to confirm:** opted-out customers get no order status messages; a customer can cancel only before acceptance and before a verified payment.
    - **AD-32 asks you to confirm:** the reconciliation report and payment reversal are owner-only (managers can't); a duplicate reference is refused rather than allowed with a warning; the COD first-order limit applies until a customer has a *completed* order; staff confirm the full order total (no partial payments).
+   - **AD-33 asks you to confirm:** the dashboard is plain JavaScript with no build step; only the owner sees WhatsApp details and the QR re-link (managers see whether orders are being taken, not the QR); kitchen roles don't see the today summary; updates by polling every 5 seconds.
 2. **The optional customer order-tracking link (§5).** Not approved.
 3. **The validation-dependent decisions V-01 to V-10.** These come back to you with the trial evidence.
 4. **The cost commitment.** Approve only after vendor checks and V-03.

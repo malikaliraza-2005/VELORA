@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Authorisation** | **NOT AUTHORISED.** Once authorised and once P3–P8 are complete (as built so far), it may be built and tested against the `FakeProvider` before the OpenWA Go ([AD-25](../../architecture/architecture-decisions.md#ad-25-provider-neutral-build-track-while-the-openwa-test-waits)). Tests that need real WhatsApp traffic stay gated by the Go. |
+| **Authorisation** | **Authorised by the owner ("Start P9", 2026-10-22)** for the provider-neutral part, built and tested against the `FakeProvider` before the OpenWA Go ([AD-25](../../architecture/architecture-decisions.md#ad-25-provider-neutral-build-track-while-the-openwa-test-waits)). Tests that need real WhatsApp traffic stay gated by the Go. Implementation choices: [AD-33](../../architecture/architecture-decisions.md#ad-33-p9-implementation-choices-staff-dashboard). |
 | **Depends on** | P3–P8 |
 | **Blocks** | P10 |
 | **Effort (estimate)** | about 2 weeks |

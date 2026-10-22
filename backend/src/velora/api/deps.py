@@ -4,6 +4,8 @@
 - Any state-changing request (not GET/HEAD/OPTIONS) needs the `X-CSRF-Token` header, derived
   from the session (see `velora.identity.tokens.csrf_token_for`), and, when the browser sends
   an `Origin` header, it must be the dashboard's own origin.
+- Any state-changing request also needs an `Idempotency-Key` header (AD-20, P9); see
+  `velora.api.idempotency`.
 - The tenant always comes from the authenticated session, never from the request.
 """
 
@@ -15,6 +17,7 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 
+from velora.api.idempotency import IdempotencyStore, claim_request
 from velora.clock import Clock
 from velora.config import Settings
 from velora.conversation.service import ConversationService
@@ -24,6 +27,7 @@ from velora.identity.sessions import SessionService, StaffSession
 from velora.identity.staff import StaffService
 from velora.identity.tokens import csrf_matches
 from velora.menu.service import MenuService
+from velora.messaging.channel_admin import ChannelService
 from velora.ordering.service import OrderingService
 from velora.orders.service import OrderService
 from velora.payments.service import PaymentService
@@ -45,6 +49,8 @@ class Services:
     payments: PaymentService
     conversations: ConversationService
     login_limiter: RateLimiter
+    idempotency: IdempotencyStore
+    channels: ChannelService
 
 
 def get_services(request: Request) -> Services:
@@ -71,6 +77,7 @@ async def current_session(request: Request, services: ServicesDep) -> StaffSessi
         check_origin(request, services.settings)
         if not csrf_matches(session.token, request.headers.get(CSRF_HEADER)):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "missing or wrong CSRF token")
+        await claim_request(request, services.idempotency, session)
     return session
 
 

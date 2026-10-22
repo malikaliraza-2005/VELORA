@@ -36,7 +36,8 @@ log = logging.getLogger(__name__)
 
 HEALTH_POLL_INTERVAL = timedelta(seconds=60)
 
-Source = Literal["webhook", "poll", "send_error"]
+# "relink": the owner started pairing from the dashboard (P9-T6).
+Source = Literal["webhook", "poll", "send_error", "relink"]
 
 
 @dataclass(frozen=True)

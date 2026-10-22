@@ -1,6 +1,6 @@
 # VELORA implementation status
 
-- **Last updated:** 2026-10-21
+- **Last updated:** 2026-10-22
 - **Plan:** [`implementation-plan.md`](implementation-plan.md) (master roadmap); detailed tasks per phase in [`phases/`](phases/)
 - **Decisions:** [`../architecture/architecture-decisions.md`](../architecture/architecture-decisions.md)
 
@@ -20,10 +20,11 @@
 | **P6** | **Provider-neutral part built (2026-10-21).** Authorised by the owner ("Start P6"). Built under AD-25 against the `FakeProvider`, with Groq as the first AI adapter (AD-30). Order creation on YES is P7. **Real customer text must not go to Groq** until the owner decides on AD-04 (see AD-30). See "P6 task evidence". |
 | **P7** | **Provider-neutral part built (2026-10-21).** Authorised by the owner ("Start P7"). Built under AD-25 against the `FakeProvider`. Choices recorded in AD-31. See "P7 task evidence". |
 | **P8** | **Provider-neutral part built (2026-10-21).** Authorised by the owner ("Start P8"). Built under AD-25 against the `FakeProvider`. Choices recorded in AD-32. Each restaurant must enter its account details before transfer is offered. See "P8 task evidence". |
-| **P9–P13** | **Not started. Not authorised.** |
+| **P9** | **Provider-neutral part built (2026-10-22).** Authorised by the owner ("Start P9"). Built under AD-25 against the `FakeProvider`. Choices recorded in AD-33. The staging end-to-end run with a test number and the usability check with kitchen staff (P9-T8) wait for the Go, P12 and P13. See "P9 task evidence". |
+| **P10–P13** | **Not started. Not authorised.** |
 | **Provider-neutral track (AD-25)** | Owner decision 2026-10-21: the provider-neutral parts of P5, and P6–P9, may be built against the `FakeProvider` before the OpenWA Go, each once it is authorised. |
 | **OpenWA adapter, real WhatsApp traffic, P10–P13** | **Blocked** until the live validation is complete and the owner gives a Go (V-01). |
-| **Application code** | P1 skeleton, the P2 database layer, P3 staff identity (login, sessions, roles, PINs, audit, founder onboarding tool), P4 menu and ordering controls (versioned catalogue, CSV import, publish and rollback, availability, pause, capacity, settings, server-side pricing), and the P5 provider-neutral messaging core (provider interface, FakeProvider, durable inbox and outbox, channel state machine, circuit breaker, global pause, worker loop, log redaction). P6 conversations (engine, commands, numbered menus, AI proposals via Groq, cart, checkout, templated summary, handoff). P7 order lifecycle (YES nonce, order transaction, transition table, timers, status messages, recovery hook, staff order API). P8 payment verification (append-only ledger, reference + PIN verification, duplicate references, late-payment review, owner reconciliation and reversal, COD blocklist, transfer details, customer evidence). No real WhatsApp connection. |
+| **Application code** | P1 skeleton, the P2 database layer, P3 staff identity (login, sessions, roles, PINs, audit, founder onboarding tool), P4 menu and ordering controls (versioned catalogue, CSV import, publish and rollback, availability, pause, capacity, settings, server-side pricing), and the P5 provider-neutral messaging core (provider interface, FakeProvider, durable inbox and outbox, channel state machine, circuit breaker, global pause, worker loop, log redaction). P6 conversations (engine, commands, numbered menus, AI proposals via Groq, cart, checkout, templated summary, handoff). P7 order lifecycle (YES nonce, order transaction, transition table, timers, status messages, recovery hook, staff order API). P8 payment verification (append-only ledger, reference + PIN verification, duplicate references, late-payment review, owner reconciliation and reversal, COD blocklist, transfer details, customer evidence). P9 staff dashboard (installable PWA in `web/`: order board, payments, chats, menu availability, controls, today summary, WhatsApp status and QR re-link, staff, settings; idempotency keys on every action; CSP with Trusted Types; browser tests). No real WhatsApp connection. |
 | **Purchases / subscriptions** | None. |
 
 **What the owner can provide right now:**
@@ -50,8 +51,8 @@ A reduced live-trial variant that fits these constraints is **proposed, not appr
 | [P5 Provider abstraction and OpenWA adapter](phases/p05-whatsapp-provider-and-openwa-adapter.md) | **Provider-neutral part complete** (2026-10-21). **OpenWA part blocked** | OpenWA part: **live validation + Go (V-01)**; V-02, V-04, V-05, V-06, V-07, V-08 | PR #6; CI run 39604566511 (580 tests). See "P5 task evidence" | Owner: review AD-29 |
 | [P6 Conversation workflows](phases/p06-conversation-workflows.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). Split limit provisional: V-09. AI accuracy on real data: P0-F6. Groq for real customers: owner decision (AD-30) | PR #7; CI run 39613089570 (652 tests). See "P6 task evidence" | Owner: review AD-30 and decide on Groq vs AD-04; confirm the 90% target; authorise P7 when ready |
 | [P7 Order lifecycle](phases/p07-order-lifecycle.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). The P11 drill also exercises the recovery hook | PR #9; CI run 39636189526 (702 tests). See "P7 task evidence" | Owner: review AD-31 |
-| [P8 Payment verification](phases/p08-payment-verification.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). Evidence media for staff: P5-T2 | PR #10; CI run 39641355254 (761 tests). See "P8 task evidence" | Owner: review AD-32; authorise P9 when ready |
-| [P9 Staff dashboard](phases/p09-staff-dashboard.md) | Not started — not authorised | P3–P8 (built) | — | — |
+| [P8 Payment verification](phases/p08-payment-verification.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). Evidence media for staff: P5-T2 | PR #10; CI run 39641355254 (761 tests). See "P8 task evidence" | Owner: review AD-32 |
+| [P9 Staff dashboard](phases/p09-staff-dashboard.md) | **Provider-neutral part built** (2026-10-22) | Staging E2E with a test number: Go (V-01) and P12. Usability check: P13 | PR #12. See "P9 task evidence" | Owner: review AD-33 |
 | [P10 Monitoring](phases/p10-monitoring-and-alerting.md) | Not started — blocked | P5–P9 | — | — |
 | [P11 Backups and recovery](phases/p11-backups-recovery-and-runbooks.md) | Not started — blocked | P2, P5, P7; V-07 | — | — |
 | [P12 Deployment and staging](phases/p12-deployment-and-staging.md) | Not started — blocked | P10, P11; V-03 | — | — |
@@ -292,6 +293,36 @@ Only the provider-neutral track that AD-25 allows was built. Implementation choi
 - **P11:** retention must cover `payment_evidence`.
 - **P13:** each restaurant enters its account details before transfer is offered.
 
+## P9 task evidence (2026-10-22)
+
+Only the provider-neutral track that AD-25 allows was built. Implementation choices are recorded as **ADOPTED (delegated)** in decision AD-33, for owner review. Browser tests drive headless Chromium against the real app and database, with the `FakeProvider` as WhatsApp.
+
+| Task | Status | Evidence (tests in `backend/tests/`) |
+|---|---|---|
+| P9-T1 PWA shell, login, role-scoped views | Done | `web/test_acceptance.py`: **the kitchen-device role can't open settings** (no menu entry, a refusal screen, and 403 from the API). `web/test_dashboard.py`: **browser storage holds no tokens** (local and session storage and IndexedDB empty; the service-worker cache holds no API answer and no login token; the session cookie is HttpOnly, Secure and SameSite=Strict; the token is gone from the address bar); every response carries the CSP (Trusted Types required); every screen opens for the owner without a script error. `api/test_dashboard.py`: the page has no inline script, and the code never writes HTML strings, evaluates code or uses browser storage |
+| P9-T2 Order board | Done | `web/test_acceptance.py`: **a double tap makes one transition**; the same request sent twice with one key is replayed, not repeated; new orders raise the alert banner. `api/test_dashboard.py`: an action without a key is refused (428); a repeat replays the first status (one move); a key reused for another request is refused (422); a failed action frees its key; keys are per session, refused while in progress, taken over once abandoned, and dropped after 24 hours |
+| P9-T3 Payment received | Done | `web/test_acceptance.py`: **a missing reference or PIN is refused** in the panel before anything is sent; a wrong PIN is refused by the server and records nothing; the right one marks the order paid, with its ledger entry; **on the kitchen tablet the confirmer must be named**, and the ledger records that person. `api/test_dashboard.py`: the confirmer list and the late-payments list. The P8 API tests still pass |
+| P9-T4 Chats and handoff inbox | Done (staging with a test number gated) | `web/test_acceptance.py`: **a staff reply reaches the (simulated) customer through the outbox**, and **Resume restores the bot** (the cart is kept). `api/test_dashboard.py`: replies go only to handed-over chats of customers who haven't opted out; audited with the length, not the text; kitchen roles refused; failed and unknown messages listed |
+| P9-T5 Menu, controls, summary, staff | Done | `api/test_dashboard.py`: **every API path the dashboard calls exists** (the same endpoints, so the same permissions, as P3 and P4); the today summary's counts, and kitchen roles refused. The P3 and P4 API tests still pass |
+| P9-T6 WhatsApp status and QR re-link | Done (staging with a test number gated) | `web/test_acceptance.py`: **QR re-link restores the channel and clears the banner** (needs_qr, re-link, the QR image, the phone "scans", the health poll, connected); a manager can't see channels or the QR. `api/test_dashboard.py`: re-link is audited and recorded; the QR is an SVG sent `no-store`, and is never in the audit or event records; a connected channel, or one whose adapter isn't running, is not re-linked |
+| P9-T7 Live updates and offline awareness | Done | `web/test_acceptance.py`: **with the network cut, an action is refused visibly** ("Connection lost — this was not sent") and **nothing is queued**: after reconnecting, the order is unchanged |
+| P9-T8 End-to-end and usability | **Gated** | The staging run (order, accept, preparing, done, with WhatsApp updates to a test number) needs the Go (V-01) and staging (P12). The usability check with kitchen staff is part of P13 |
+
+**Verified in CI:** pending (PR #12).
+
+**P9 exit criteria:**
+- **A double tap creates no duplicate transition:** met.
+- **The kitchen-device role can't open settings:** met.
+- **QR re-link restores the channel and clears the banner:** met against the `FakeProvider`. The run with a test number is gated by the Go.
+- **End-to-end in staging, with matching WhatsApp updates:** gated by the Go (V-01) and P12.
+- **Usability with a real kitchen staff member:** P13.
+
+**Findings for later phases:** see AD-33. In short:
+- **P5-T2:** evidence images for staff, and the OpenWA adapter's QR code.
+- **P10:** alert on failed and unknown messages.
+- **P12:** serve `velora.asgi:app` behind TLS with HSTS, and trust proxy headers.
+- **P13:** the usability check and the staging end-to-end run.
+
 ## Resuming the live test
 
 The owner provides:
@@ -316,13 +347,13 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 | B5 | Vendor prices not fully verified (see price sheet) | Infrastructure commitment (P12) | Engineering |
 | B6 | AI model not selected (no real dataset). Groq gpt-oss-20b is the built adapter (AD-30), but the selection needs the P0-F6 evaluation | Pilot use of AI | Engineering |
 | B7 | ~~Delivery channel for staff magic links undecided~~ **Resolved for the pilot:** manual delivery (AD-27, ADOPTED (delegated)). Email is a later option | — | Engineering |
-| B8 | Owner authorisation for P9–P13 (P1 to P8 authorised 2026-10-21; P5 to P8 for their provider-neutral parts only) | P9 onwards | Owner |
+| B8 | Owner authorisation for P10–P13 (P1 to P8 authorised 2026-10-21, P9 on 2026-10-22; P5 to P9 for their provider-neutral parts only) | P10 onwards | Owner |
 | B10 | Groq's free tier vs AD-04 (paid tier, no training on our data). Groq's training terms are unverified | Sending real customer messages to the AI | Owner |
 | B9 | Reduced trial variant and trial tooling (P0-E1) not approved | Resuming the live test | Owner |
 
 ## Decisions awaiting the owner
 
-- Review the **ADOPTED (delegated)** decisions AD-11 to AD-24 and AD-26 to AD-32 ([decisions §8](../architecture/architecture-decisions.md#8-items-for-owner-review)).
+- Review the **ADOPTED (delegated)** decisions AD-11 to AD-24 and AD-26 to AD-33 ([decisions §8](../architecture/architecture-decisions.md#8-items-for-owner-review)).
 - Approve or reject the **reduced live-trial variant** ([validation plan §9](openwa-validation-plan.md)).
 - **Go/No-Go and V-01 to V-10:** after the live trial.
 - **Infrastructure cost commitment:** after vendor checks.
@@ -333,6 +364,7 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 
 | Date | Change |
 |---|---|
+| 2026-10-22 | Owner authorised **P9** ("Start P9"). Built the provider-neutral part: the staff dashboard PWA in `web/`, idempotency keys on every action (migration 0011), the chat reply, channel and QR re-link, summary, late-payment and confirmer endpoints, security headers, and browser tests in headless Chromium (PR #12). Decision AD-33 recorded as ADOPTED (delegated). |
 | 2026-10-21 | Owner authorised **P6** ("Start P6") and asked to consider Groq as a free LLM. Built the provider-neutral part: engine, commands, renderer, AI proposals with a Groq adapter, cart and checkout, handoff, and the offline harness (PR #7, CI run 39613089570; migration 0008; 652 tests). Decision AD-30 recorded as ADOPTED (delegated). Groq's free tier for real customer messages conflicts with AD-04 and is left to the owner (B10). |
 | 2026-10-21 | Owner authorised **P5** ("Start P5"). Built only the provider-neutral track (AD-25): T1, T7 and T8, plus the cores of T3, T4 and T5 (PR #6, CI run 39604566511; migration 0007; 580 tests). The OpenWA parts (T2, T6, the OpenWA endpoint and detection) stay blocked by V-01. Decision AD-29 (P5 choices, including the `velora_dispatcher` role that resolves the AD-26 finding) recorded as ADOPTED (delegated). |
 | 2026-10-21 | Owner authorised **P4** ("Start P4"). P4 implemented and verified in CI (PR #5, run 39598901486; migration 0006; 491 tests). Decision AD-28 (P4 choices) recorded as ADOPTED (delegated). |

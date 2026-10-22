@@ -1,4 +1,5 @@
-"""Staff side of orders (P7-T3): list, view and move orders. The dashboard screens are P9.
+"""Staff side of orders (P7-T3): list, view and move orders, plus the dashboard's late
+payments list and today summary (P9).
 
 - Viewing needs `ORDERS_VIEW`; moving an order needs `ORDERS_UPDATE` (every staff role, so
   the kitchen can accept and progress orders).
@@ -12,16 +13,18 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from velora.clock import Clock
+from velora.conversation.pktime import PKT
 from velora.db import Database
 from velora.identity.errors import (
     ConflictError,
     ForbiddenError,
     InvalidInputError,
     NotFoundError,
+    expect_row,
 )
 from velora.identity.permissions import Permission
 from velora.identity.sessions import StaffSession
@@ -29,6 +32,9 @@ from velora.orders import lifecycle
 from velora.orders.lifecycle import Actor, Status
 
 LIST_LIMIT = 200
+# Expired transfer orders shown for late review. Staff have no time limit (AD-32); this only
+# bounds the list.
+LATE_WINDOW = timedelta(days=7)
 
 
 @dataclass(frozen=True)
@@ -146,10 +152,104 @@ def _view(row: tuple[Any, ...], lines: list[OrderLine], history: list[OrderMove]
     )
 
 
+@dataclass(frozen=True)
+class LatePayment:
+    """An expired transfer order: the customer may still have paid (P8-T5)."""
+
+    order: OrderView
+    evidence_count: int
+
+
+@dataclass(frozen=True)
+class TodaySummary:
+    """One Pakistan day, from the orders placed that day (P9-T5)."""
+
+    day: date
+    starts_at: datetime
+    ends_at: datetime
+    placed: int
+    open: int
+    completed: int
+    cancelled: int
+    expired: int
+    completed_paisa: int
+    completed_cod_paisa: int
+    completed_transfer_paisa: int
+    # Transfers verified today (any order), less today's reversals; the owner's report has
+    # the detail.
+    transfers_verified_paisa: int
+    handoffs_waiting: int
+
+
 class OrderService:
     def __init__(self, db: Database, clock: Clock) -> None:
         self._db = db
         self._clock = clock
+
+    async def late_payments(self, actor: StaffSession) -> list[LatePayment]:
+        """Expired transfer orders from the last `LATE_WINDOW`, newest first, with how much
+        evidence the customer sent. They aren't in the active list."""
+        _require(actor, Permission.ORDERS_VIEW)
+        since = self._clock.now() - LATE_WINDOW
+        async with self._db.tenant(actor.tenant) as conn:
+            cur = await conn.execute(
+                f"SELECT {_COLUMNS}, (SELECT count(*) FROM velora.payment_evidence e "  # noqa: S608 - fixed fragments
+                f"WHERE e.order_id = o.id) {_FROM} WHERE o.status = 'expired' "
+                "AND o.payment_method = 'transfer' AND o.updated_at >= %s "
+                f"ORDER BY o.updated_at DESC LIMIT {LIST_LIMIT}",
+                (since,),
+            )
+            return [LatePayment(_view(row[:-1], [], []), row[-1]) for row in await cur.fetchall()]
+
+    async def today(self, actor: StaffSession, day: date) -> TodaySummary:
+        _require(actor, Permission.REPORTS_VIEW)
+        starts = datetime.combine(day, time(0), PKT)
+        ends = starts + timedelta(days=1)
+        terminal = sorted(lifecycle.TERMINAL)
+        async with self._db.tenant(actor.tenant) as conn:
+            cur = await conn.execute(
+                "SELECT count(*), "
+                "count(*) FILTER (WHERE NOT status = ANY(%(terminal)s)), "
+                "count(*) FILTER (WHERE status = 'completed'), "
+                "count(*) FILTER (WHERE status IN ('cancelled', 'rejected')), "
+                "count(*) FILTER (WHERE status = 'expired'), "
+                "COALESCE(sum(total_paisa) FILTER (WHERE status = 'completed'), 0), "
+                "COALESCE(sum(total_paisa) FILTER (WHERE status = 'completed' "
+                "AND payment_method = 'cod'), 0), "
+                "COALESCE(sum(total_paisa) FILTER (WHERE status = 'completed' "
+                "AND payment_method = 'transfer'), 0) "
+                "FROM velora.orders WHERE created_at >= %(starts)s AND created_at < %(ends)s",
+                {"terminal": terminal, "starts": starts, "ends": ends},
+            )
+            placed, open_, completed, cancelled, expired, paisa, cod, transfer = expect_row(
+                await cur.fetchone()
+            )
+            cur = await conn.execute(
+                "SELECT COALESCE(sum(CASE status WHEN 'verified' THEN amount_paisa "
+                "ELSE -amount_paisa END), 0) FROM velora.payments "
+                "WHERE method = 'transfer' AND verified_at >= %s AND verified_at < %s",
+                (starts, ends),
+            )
+            (transfers,) = expect_row(await cur.fetchone())
+            cur = await conn.execute(
+                "SELECT count(*) FROM velora.conversations WHERE state = 'handoff'"
+            )
+            (handoffs,) = expect_row(await cur.fetchone())
+        return TodaySummary(
+            day=day,
+            starts_at=starts,
+            ends_at=ends,
+            placed=placed,
+            open=open_,
+            completed=completed,
+            cancelled=cancelled,
+            expired=expired,
+            completed_paisa=paisa,
+            completed_cod_paisa=cod,
+            completed_transfer_paisa=transfer,
+            transfers_verified_paisa=transfers,
+            handoffs_waiting=handoffs,
+        )
 
     async def list_orders(self, actor: StaffSession, *, active: bool = True) -> list[OrderView]:
         """Orders, newest first. `active`: only those that haven't ended."""

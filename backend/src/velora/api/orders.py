@@ -1,5 +1,6 @@
-"""Order endpoints (P7-T3). The dashboard screens are P9. Viewing needs `ORDERS_VIEW`, moving
-an order `ORDERS_UPDATE`; the tenant comes from the session. Every move is audited."""
+"""Order endpoints (P7-T3, P9). Viewing needs `ORDERS_VIEW`, moving an order `ORDERS_UPDATE`;
+the tenant comes from the session. Every move is audited. `GET /api/orders/late-payments`
+lists expired transfer orders for the late review (P8-T5), which the active list leaves out."""
 
 from __future__ import annotations
 
@@ -79,6 +80,17 @@ async def list_orders(
 ) -> list[OrderOut]:
     found = await services.orders.list_orders(session, active=active)
     return [OrderOut.model_validate(o, from_attributes=True) for o in found]
+
+
+class LatePaymentOut(BaseModel):
+    order: OrderOut
+    evidence_count: int
+
+
+@router.get("/late-payments")
+async def late_payments(session: OrdersViewer, services: ServicesDep) -> list[LatePaymentOut]:
+    found = await services.orders.late_payments(session)
+    return [LatePaymentOut.model_validate(f, from_attributes=True) for f in found]
 
 
 @router.get("/{order_id}")

@@ -91,7 +91,12 @@ def test_role_permission_matrix() -> None:
     expected = {
         Role.OWNER: set(Permission),
         Role.MANAGER: set(Permission)
-        - {Permission.STAFF_MANAGE, Permission.PAYMENTS_RECONCILE, Permission.PAYMENTS_REVERSE},
+        - {
+            Permission.STAFF_MANAGE,
+            Permission.PAYMENTS_RECONCILE,
+            Permission.PAYMENTS_REVERSE,
+            Permission.CHANNELS_MANAGE,
+        },
         Role.KITCHEN: {
             Permission.ORDERS_VIEW,
             Permission.ORDERS_UPDATE,
@@ -126,6 +131,16 @@ def test_only_the_owner_manages_staff() -> None:
 def test_only_the_owner_reconciles_and_reverses_payments(permission: Permission) -> None:
     """P8-T6: the owner's report and reversal are the check on everyone else."""
     assert [r for r in Role if allows(r, permission)] == [Role.OWNER]
+
+
+def test_only_the_owner_relinks_whatsapp() -> None:
+    """P9-T6: a pairing QR code gives control of the ordering number."""
+    assert [r for r in Role if allows(r, Permission.CHANNELS_MANAGE)] == [Role.OWNER]
+
+
+def test_kitchen_roles_see_no_takings() -> None:
+    """P9-T5: the today summary is for the owner and manager."""
+    assert [r for r in Role if allows(r, Permission.REPORTS_VIEW)] == [Role.OWNER, Role.MANAGER]
 
 
 def test_kitchen_device_is_not_a_person() -> None:

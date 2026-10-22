@@ -74,8 +74,8 @@ def _resume(w: World) -> tuple[Device, httpx2.Response]:
     return w.owner, w.owner.request("POST", "/api/ordering/resume")
 
 
-def _resume_bot(w: World) -> tuple[Device, httpx2.Response]:
-    """P6: a chat handed over to staff, then Resume bot."""
+def _handed_over(w: World) -> Any:
+    """A chat handed over to staff (P6)."""
     with w.db.admin() as conn, conn.transaction():
         conn.execute("SELECT set_config('app.tenant_id', %s, true)", (str(w.tenant.value),))
         row = conn.execute(
@@ -91,7 +91,31 @@ def _resume_bot(w: World) -> tuple[Device, httpx2.Response]:
             (w.tenant.value, row[0], w.tenant.value),
         ).fetchone()
         assert found is not None
-    return w.owner, w.owner.request("POST", f"/api/conversations/{found[0]}/resume")
+    return found[0]
+
+
+def _resume_bot(w: World) -> tuple[Device, httpx2.Response]:
+    """P6: Resume bot on a handed-over chat."""
+    return w.owner, w.owner.request("POST", f"/api/conversations/{_handed_over(w)}/resume")
+
+
+def _staff_reply(w: World) -> tuple[Device, httpx2.Response]:
+    """P9: a reply to a chat handed over to staff."""
+    path = f"/api/conversations/{_handed_over(w)}/reply"
+    return w.owner, w.owner.request("POST", path, json={"text": "Hi"})
+
+
+def _relink(w: World) -> tuple[Device, httpx2.Response]:
+    """P9: the owner re-links a WhatsApp number that needs its QR code scanned."""
+    with w.db.admin() as conn:
+        (channel,) = (
+            conn.execute(
+                "UPDATE velora.channels SET state = 'needs_qr' WHERE tenant_id = %s RETURNING id",
+                (w.tenant.value,),
+            ).fetchone()
+            or ()
+        )
+    return w.owner, w.owner.request("POST", f"/api/channels/{channel}/relink")
 
 
 def _move_order(w: World) -> tuple[Device, httpx2.Response]:
@@ -221,6 +245,12 @@ CASES: dict[tuple[str, str], tuple[str, Case]] = {
         "conversation.bot_resumed",
         _resume_bot,
     ),
+    # P9: the dashboard.
+    ("POST", "/api/conversations/{conversation_id}/reply"): (
+        "conversation.staff_replied",
+        _staff_reply,
+    ),
+    ("POST", "/api/channels/{channel_id}/relink"): ("channel.relink_started", _relink),
     # P7: order lifecycle.
     ("POST", "/api/orders/{order_id}/status"): ("order.status_changed", _move_order),
     # P8: payments.

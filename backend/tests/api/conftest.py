@@ -22,11 +22,13 @@ from pydantic import BaseModel
 from tests.db import conftest as db_fixtures
 from tests.db.conftest import APP_ROLE, PgDatabase
 from velora.admin.onboarding import Onboarding
+from velora.api import idempotency
 from velora.api.deps import CSRF_HEADER, SESSION_COOKIE, Services, ServicesDep, SessionDep
 from velora.app import create_app
 from velora.clock import FakeClock
 from velora.config import Settings
 from velora.db import TenantId
+from velora.messaging.providers.fake import FakeProvider
 
 # The database fixtures live in tests/db; re-export them for the API tests.
 cluster = db_fixtures.cluster
@@ -69,8 +71,14 @@ def add_payment_pin_probe(app: FastAPI) -> None:
 
 
 @pytest.fixture()
-def app(settings: Settings, clock: FakeClock) -> FastAPI:
-    app = create_app(settings, clock=clock)
+def fake() -> FakeProvider:
+    """Simulated WhatsApp for the API (the owner's QR re-link, P9)."""
+    return FakeProvider()
+
+
+@pytest.fixture()
+def app(settings: Settings, clock: FakeClock, fake: FakeProvider) -> FastAPI:
+    app = create_app(settings, clock=clock, providers={"fake": fake})
     add_payment_pin_probe(app)
     return app
 
@@ -91,8 +99,13 @@ def platform(db: PgDatabase, clock: FakeClock) -> Iterator[Onboarding]:
         yield Onboarding(conn, operator="test-founder", clock=clock)
 
 
+_UNSET: Any = object()
+
+
 class Device:
-    """One browser or tablet: its own session cookie and CSRF token."""
+    """One browser or tablet: its own session cookie and CSRF token. Like the dashboard, it
+    sends a fresh Idempotency-Key with every state-changing request unless given one (None
+    sends none)."""
 
     def __init__(self, client: TestClient) -> None:
         self.client = client
@@ -101,9 +114,19 @@ class Device:
         self.staff_id: uuid.UUID | None = None
 
     def request(
-        self, method: str, path: str, *, csrf: bool = True, **kwargs: Any
+        self,
+        method: str,
+        path: str,
+        *,
+        csrf: bool = True,
+        idempotency_key: str | None = _UNSET,
+        **kwargs: Any,
     ) -> httpx2.Response:
         headers = dict(kwargs.pop("headers", {}))
+        if idempotency_key is _UNSET and method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+            idempotency_key = uuid.uuid4().hex
+        if isinstance(idempotency_key, str):
+            headers[idempotency.HEADER] = idempotency_key
         if self.cookie is not None:
             headers["Cookie"] = f"{SESSION_COOKIE}={self.cookie}"
         if csrf and self.csrf is not None:
