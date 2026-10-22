@@ -36,6 +36,7 @@ PAID_MENTIONS = {
     "velora.payments.service:PaymentService.verify",  # reference + PIN
     "velora.payments.service:PaymentService.review_late",  # reference + PIN, late payment
     "velora.payments.service:PaymentService.reverse",  # owner + PIN: moves *off* paid
+    "velora.monitoring.metrics:collect",  # read-only funnel count, as velora_monitor
 }
 LEDGER_WRITERS = {
     "velora.payments.service:PaymentService._record_verified",

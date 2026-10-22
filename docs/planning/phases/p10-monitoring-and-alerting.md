@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Authorisation** | **NOT AUTHORISED.** **BLOCKED** until P5–P9 are complete (WhatsApp-dependent). |
+| **Authorisation** | **Authorised 2026-10-22** ("Start P10"), read as the provider-neutral part before the Go (AD-34, to be confirmed). Real alert delivery waits for a vendor (PC-11); the staging run for P12. |
 | **Depends on** | P5–P9 |
 | **Blocks** | P12 |
 | **Effort (estimate)** | 4–5 days |
@@ -16,6 +16,7 @@
 | AD-22: pilot stop rules (fed by metrics) | ADOPTED (delegated) |
 | AD-24: no secrets in logs | ADOPTED (delegated) |
 | PC-11: paid uptime-monitoring tier | PROPOSED, awaiting review |
+| AD-34: P10 implementation choices | ADOPTED (delegated) |
 | Monitoring vendor and cost | See the [price sheet](../../architecture/architecture-decisions.md#6-cost-estimates-not-verified-recheck-before-committing) (not committed) |
 
 ## Objective and scope

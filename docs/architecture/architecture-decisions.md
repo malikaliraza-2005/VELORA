@@ -633,6 +633,63 @@ Stop or pause the pilot on any of these:
   - **P13:** the usability check with real kitchen staff (P9-T8), and the end-to-end staging run with a test number.
 - **Evidence:** PR #12. CI run 39775329133 (810 tests). Migration 0011; tests in `backend/tests/api/test_dashboard.py` and `backend/tests/web/`.
 
+### AD-34: P10 implementation choices (monitoring and alerting)
+- **Status:** ADOPTED (delegated), awaiting owner review. It implements AD-19 (alerts), AD-22 (stop rules fed by metrics) and AD-24 (no secrets in logs).
+- **Scope of the authorisation (needs the owner's confirmation):** AD-25 lists P10 as gated by the Go. The owner said "Start P10" on 2026-10-22, and this was read the same way as P5–P9: **build the provider-neutral part against the `FakeProvider`**. Nothing here connects to WhatsApp, buys a service or deploys anything.
+- **Structured logs (P10-T1):**
+  - One JSON object per line: time (UTC), level, logger, message, `tenant_id`, `correlation_id`, and the traceback if any. **Every string is redacted before it is written.** `VELORA_LOG_FORMAT=text` gives a readable line for local use, still redacted.
+  - Each request gets a correlation id: the caller's `X-Request-ID` if it is 8–64 safe characters, otherwise a new one. It is returned in `X-Request-ID`, so a staff member's report can be matched to the log. The tenant is added once the session is known. Each worker round gets its own id, and the tenant being worked on.
+  - Uvicorn's own log lines go through the same formatter.
+  - Redaction now also covers **cookies and session cookies**. A logged `Cookie` header would otherwise have leaked the dashboard session. This was found while writing the T1 test.
+  - A server error is logged once, with the method, path and status, never the query or body.
+- **Readiness:** `/readyz` answers 200 only if the database answers within 5 seconds (503 otherwise), and says nothing else. `/healthz` stays a plain liveness check.
+- **A new role, `velora_monitor` (migration 0012):**
+  - Like `velora_dispatcher`: login, NOBYPASSRLS, owns nothing, and reads across tenants through SELECT-only policies.
+  - Column grants only: statuses, timestamps, ids and tenant names. **No payload, message, address, amount, reference or customer**, and no audit log. A test lists what it may and may not read.
+  - It can append to two global, append-only tables and nothing else: `backup_runs` (the P11 backup job reports each run) and `alert_events` (each alert sent or cleared). The runtime role can't see either.
+  - *Alternative:* run the monitor as a superuser or with BYPASSRLS. Rejected: one leaked monitor password would expose every restaurant's data.
+- **Two new per-tenant tables (RLS, append-only):**
+  - `handoff_events`, written by a trigger when a chat is handed to staff. Conversations keep only the current handoff, and P13 needs a daily count.
+  - `ingress_rejections`: webhooks refused for a bad signature, a bad payload, another session's events, or an error while storing. No body or header is kept. `Ingress.reject` records one; **the OpenWA webhook endpoint that calls it is still P5-T3, gated by the Go.**
+- **Metrics (P10-T2) are read from the database on demand**, not kept in process memory. The API, worker and monitor are separate processes, and the database already holds the truth. There is no metrics server (such as Prometheus) to run or secure.
+  - Inbox and outbox: items due, and how long the oldest has waited. A stopped worker shows up as a growing age.
+  - Dead letters: inbox events that ended `failed`, and outbox messages that ended `failed` or `unknown`, in 24 hours (the P5 and P9 finding).
+  - Channels: state and since when; state changes in 24 hours; minutes in `needs_qr` per day.
+  - Refused webhooks in 15 minutes, by reason. The last backup run, and the last good one.
+  - Today's order funnel (placed, awaiting, in progress, completed, cancelled or rejected, expired, refund pending), and the global pause.
+- **Alerts (P10-T3):**
+  - **Rules:**
+    - the API not ready twice in a row;
+    - the monitor can't read the database;
+    - a channel out of `connected` for 5 minutes;
+    - a channel `suspected_restricted`, at once (stop rule, AD-22);
+    - a queue's oldest item waiting 5 minutes;
+    - any dead letter;
+    - 5 refused webhooks in 15 minutes;
+    - a failed backup;
+    - no good backup within 2 hours (once backups are expected, from staging on).
+  - **No noise, nothing missed:** each problem is sent once, again when it grows (e.g. more dead letters) or every 4 hours while it lasts, and once when it clears. An alert that no notifier accepted is tried again after 5 minutes. `alert_events` records every notification, so a restarted monitor doesn't repeat open alerts.
+  - **Delivery:** email (SMTP with TLS) and/or a JSON webhook to a push or SMS gateway. **Never WhatsApp**, which may be the thing that is down. Outside development, the monitor refuses to start without one, and only over https/TLS.
+  - **External uptime:** the monitor pings a heartbeat URL every minute (a "dead man's switch"), so an external service notices when the monitor or the whole host stops. The same service, or an uptime checker on `/readyz`, also covers "kill the ingress" from outside.
+  - **Which vendor** (UptimeRobot, Healthchecks.io, an SMS gateway, an email provider) is **not chosen**. It is a cost decision (PC-11, §6.4). Any service that takes a JSON POST or an HTTP ping works.
+- **Founder's dashboard (P10-T4): a command line, not a web screen**, as with the onboarding tools (AD-27).
+  - `python -m velora.monitoring status` shows every metric and the alerts that would fire now. `daily` shows the pilot metrics per restaurant.
+  - The loop also emails the previous day's metrics at 09:00 Pakistan time.
+  - **Daily metrics:** orders, completed, **completed without a human** (no handoff in that chat that day before the order), cancelled, expired, handoffs, disconnects, minutes needing a QR scan, payment verifications and reversals, dead letters, and problems alerted. Incidents are logged by hand (P13).
+  - *Alternative:* a founder web page. It needs a founder login and a cross-tenant API, which is a larger attack surface. It can be added later on the same metrics.
+- **Drills (exit criterion):** automated tests run all four drills through the real monitor loop and database:
+  1. the API stops answering;
+  2. a session is unlinked (`needs_qr`, through the worker's health poll);
+  3. inbox events fail until they are dead letters;
+  4. the backup job reports a failure.
+
+  Each alert fires once, is recorded, and clears. **Real delivery to the founder's phone or email can only be checked once a vendor is set up** (`python -m velora.monitoring test-alert`, in staging).
+- **Findings for later phases:**
+  - **P5-T3:** the OpenWA webhook endpoint must call `Ingress.reject` for each refused webhook, or the HMAC-failure alert never fires.
+  - **P11:** the backup job must call `python -m velora.monitoring record-backup` after each run. Set `VELORA_MONITOR_EXPECT_BACKUPS=true` once it runs.
+  - **P12:** run the monitor as its own container, with `VELORA_MONITOR_PROBE_URL` on the private network. Set up the heartbeat and an external `/readyz` check, and choose the alert vendor (PC-11).
+- **Evidence:** see "P10 task evidence" in the status tracker. Migration 0012; tests in `backend/tests/monitoring/` and `backend/tests/test_structured_logs.py`.
+
 ---
 
 ## 3. VALIDATION-DEPENDENT decisions (decided only after the OpenWA trial)
@@ -779,11 +836,12 @@ A few GB of dumps is probably **$0** on R2 or B2, depending on how long dumps ar
 
 ## 8. Items for owner review
 
-1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-33).** They stand unless you reverse them.
+1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-34).** They stand unless you reverse them.
    - **AD-30 needs a decision:** may Groq's free tier receive real customer messages? That would amend AD-04 (paid tier, no training), and Groq's training terms are unverified.
    - **AD-31 asks you to confirm:** opted-out customers get no order status messages; a customer can cancel only before acceptance and before a verified payment.
    - **AD-32 asks you to confirm:** the reconciliation report and payment reversal are owner-only (managers can't); a duplicate reference is refused rather than allowed with a warning; the COD first-order limit applies until a customer has a *completed* order; staff confirm the full order total (no partial payments).
    - **AD-33 asks you to confirm:** the dashboard is plain JavaScript with no build step; only the owner sees WhatsApp details and the QR re-link (managers see whether orders are being taken, not the QR); kitchen roles don't see the today summary; updates by polling every 5 seconds.
+   - **AD-34 asks you to confirm:** that "Start P10" meant the provider-neutral part before the Go (AD-25 listed P10 as gated); that the founder's dashboard is a command line plus a daily email, not a web page; and which alert vendor to pay for (PC-11).
 2. **The optional customer order-tracking link (§5).** Not approved.
 3. **The validation-dependent decisions V-01 to V-10.** These come back to you with the trial evidence.
 4. **The cost commitment.** Approve only after vendor checks and V-03.

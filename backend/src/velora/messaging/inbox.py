@@ -7,7 +7,10 @@ provider then redelivers, and the unique dedup key (V-05, from the adapter) drop
 Group, status and broadcast messages are dropped before anything is written. Session events
 update the channel state in the same transaction.
 
-The OpenWA webhook endpoint that calls it is P5-T2/T3, blocked until the Go (V-01).
+The OpenWA webhook endpoint that calls it is P5-T2/T3, blocked until the Go (V-01). That
+endpoint reports each webhook it refuses with `Ingress.reject` (P10): a bad signature or
+payload, another session's events, or an error while storing. Only the reason and the time
+are kept, for the monitor's ingress-error and HMAC-failure alerts.
 
 **Processing** (`InboxProcessor`) claims one event at a time with a lease:
 1. claim: `FOR UPDATE SKIP LOCKED`, status `processing`, a new claim token, lease end; commit;
@@ -26,7 +29,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any
+from typing import Any, Literal
 
 from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
@@ -120,10 +123,35 @@ def _row_for(event: InboundMessage | DeliveryStatus) -> tuple[str, str | None, d
     )
 
 
+RejectionReason = Literal["signature", "payload", "session_mismatch", "error"]
+
+
 class Ingress:
     def __init__(self, db: Database, clock: Clock) -> None:
         self._db = db
         self._clock = clock
+
+    async def reject(self, provider: str, session_ref: str, reason: RejectionReason) -> bool:
+        """Record a refused webhook for the monitor. Never raises: a failure to record must
+        not change the answer the provider gets. False if nothing could be recorded (an
+        unknown session, or the database is unavailable)."""
+        try:
+            tenant = await self._db.resolve_channel_tenant(provider, session_ref)
+            if tenant is None:
+                log.warning("webhook refused (%s) for an unknown %s session", reason, provider)
+                return False
+            async with self._db.tenant(tenant) as conn:
+                await conn.execute(
+                    "INSERT INTO velora.ingress_rejections (tenant_id, channel_id, reason, "
+                    "created_at) SELECT tenant_id, id, %s, %s FROM velora.channels "
+                    "WHERE provider = %s AND session_ref = %s AND state <> 'retired'",
+                    (reason, self._clock.now(), provider, session_ref),
+                )
+        except Exception as exc:
+            log.error("could not record a refused webhook: %s", error_text(exc))
+            return False
+        log.warning("webhook refused (%s) for tenant %s", reason, tenant.value)
+        return True
 
     async def receive(
         self, provider: str, session_ref: str, events: Sequence[ProviderEvent]

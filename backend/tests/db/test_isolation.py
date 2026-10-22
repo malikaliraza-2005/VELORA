@@ -52,6 +52,9 @@ TENANT_TABLES: dict[str, str] = {
     "order_capacity_slots": "tenant_id",
     # P9: dashboard idempotency keys.
     "idempotency_keys": "tenant_id",
+    # P10: handoffs (daily pilot metrics) and refused webhooks.
+    "handoff_events": "tenant_id",
+    "ingress_rejections": "tenant_id",
 }
 
 # Tables in the velora schema that are deliberately global (no tenant). Each needs a reason.
@@ -59,6 +62,10 @@ GLOBAL_TABLES: dict[str, str] = {
     # P5: one switch that stops new orders for every tenant (AD-19). Append-only; the runtime
     # can only read it, and only the founder's tool appends to it.
     "global_pause_events": "platform-wide pause switch",
+    # P10: the backup job's reports and the alerts sent to the founder. Append-only; only the
+    # monitor role reads and appends them, and the runtime can't see them.
+    "backup_runs": "backup job reports",
+    "alert_events": "alerts sent to the founder",
 }
 
 # Policies other than tenant_isolation: (table, policy) -> (roles, command).
@@ -73,6 +80,22 @@ EXTRA_POLICIES: dict[tuple[str, str], tuple[list[str], str]] = {
     ("outbox_messages", "dispatch_lookup"): (["velora_dispatcher"], "SELECT"),
     # P7: which tenants have a transfer window due (tenant_id, status, payment_due_at only).
     ("orders", "dispatch_lookup"): (["velora_dispatcher"], "SELECT"),
+    # P10: the founder's monitor reads counts, states and timestamps across tenants (column
+    # grants, checked in tests/monitoring/test_monitor_role.py).
+    **{
+        (table, "monitor_read"): (["velora_monitor"], "SELECT")
+        for table in (
+            "tenants",
+            "channels",
+            "channel_events",
+            "inbox_events",
+            "outbox_messages",
+            "orders",
+            "payments",
+            "handoff_events",
+            "ingress_rejections",
+        )
+    },
     # Founder onboarding tools (P3): the platform role may list tenants, and otherwise works
     # one tenant at a time under the shared tenant expression (checked below).
     ("tenants", "platform_directory"): (["velora_platform"], "SELECT"),
@@ -111,6 +134,10 @@ APPEND_ONLY = {
     "channel_events",
     "menu_publications",
     "global_pause_events",
+    "handoff_events",
+    "ingress_rejections",
+    "backup_runs",
+    "alert_events",
 }
 
 # Saved as a whole (delete and re-insert), never updated in place: the menu draft content.

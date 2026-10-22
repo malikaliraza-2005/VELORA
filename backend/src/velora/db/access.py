@@ -11,6 +11,7 @@ a request body, a webhook payload field or AI output (AD-17, AD-20).
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
@@ -18,6 +19,8 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from psycopg import AsyncConnection
+
+PING_TIMEOUT_SECONDS = 5
 
 
 class TenantContextError(RuntimeError):
@@ -51,6 +54,15 @@ class Database:
                 "SELECT pg_catalog.set_config('app.tenant_id', %s, true)", (str(tenant.value),)
             )
             yield conn
+
+    async def ping(self) -> bool:
+        """True if the database answers. Reads nothing (readiness check, P10)."""
+        try:
+            async with asyncio.timeout(PING_TIMEOUT_SECONDS), self._pool.connection() as conn:
+                await conn.execute("SELECT 1")
+        except Exception:
+            return False
+        return True
 
     async def resolve_channel_tenant(self, provider: str, session_ref: str) -> TenantId | None:
         """Bootstrap: map a provider session reference to its tenant, or None if unknown."""

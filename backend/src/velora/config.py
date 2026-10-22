@@ -9,10 +9,12 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Literal
 from urllib.parse import urlsplit
 
 VALID_ENVS = frozenset({"development", "test", "staging", "production"})
 VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR"})
+VALID_LOG_FORMATS = frozenset({"json", "text"})
 PLACEHOLDER = "CHANGE_ME"
 DEFAULT_AI_MODEL = "openai/gpt-oss-20b"
 DEFAULT_AI_TIMEOUT_SECONDS = 8.0
@@ -27,6 +29,8 @@ def _optional(source: Mapping[str, str], name: str) -> str | None:
 class Settings:
     env: str
     log_level: str
+    # json (default): one redacted JSON object per line (P10-T1). text: readable, for local use.
+    log_format: Literal["json", "text"] = "json"
     # Runtime role (app_rw). None leaves the staff API unavailable (503), e.g. in unit tests.
     database_url: str | None = None
     # Worker work discovery (velora_dispatcher, P5). Only `python -m velora.workers` uses it.
@@ -45,6 +49,9 @@ class Settings:
         source = os.environ if environ is None else environ
         env = source.get("VELORA_ENV", "development").strip().lower()
         log_level = source.get("VELORA_LOG_LEVEL", "INFO").strip().upper()
+        log_format = source.get("VELORA_LOG_FORMAT", "json").strip().lower() or "json"
+        if log_format not in VALID_LOG_FORMATS:
+            raise ValueError(f"VELORA_LOG_FORMAT must be json or text, got {log_format!r}")
         if env not in VALID_ENVS:
             raise ValueError(f"VELORA_ENV must be one of {sorted(VALID_ENVS)}, got {env!r}")
         if log_level not in VALID_LOG_LEVELS:
@@ -68,6 +75,7 @@ class Settings:
         return cls(
             env=env,
             log_level=log_level,
+            log_format="text" if log_format == "text" else "json",
             database_url=_optional(source, "VELORA_DATABASE_URL"),
             dispatcher_database_url=_optional(source, "VELORA_DISPATCHER_DATABASE_URL"),
             public_base_url=base_url,

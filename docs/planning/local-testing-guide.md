@@ -142,6 +142,21 @@ In this simulation the "phone" is always linked, so the **WhatsApp** tab just sh
 "Connected". The disconnect, QR code and re-link flow is covered by the automated browser
 tests, and will be tried for real with a test number after the Go.
 
+### H. The founder's monitor (P10)
+The monitor needs settings that older setups don't have. If you ran `setup` before P10, run it
+again with `--reset` first (this starts a fresh demo restaurant).
+
+```powershell
+uv run python -m velora.dev monitor status
+uv run python -m velora.dev monitor daily --day 2026-10-22
+uv run python -m velora.dev monitor record-backup --failed --kind hourly-dump --detail "drill"
+uv run python -m velora.dev monitor status
+```
+
+`status` shows every metric and the alerts that would fire now. After the failed backup it
+lists a **CRITICAL backup_failed** alert. Record a good one (`--ok`) to clear it. Locally no
+alert is sent anywhere: email and webhook delivery are set up for staging.
+
 ## 5. Stopping, restarting, starting over
 
 - **Stop:** press **Ctrl+C** in both windows.
