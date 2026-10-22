@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Authorisation** | **Authorised 2026-10-22** ("Start P10"), read as the provider-neutral part before the Go (AD-34, to be confirmed). Real alert delivery waits for a vendor (PC-11); the staging run for P12. |
+| **Authorisation** | **Authorised 2026-10-22** ("Start P10"), read as the provider-neutral part before the Go (AD-34, to be confirmed). Real alert delivery waits for the free mailbox and heartbeat (AD-35); the staging run for P12. |
 | **Depends on** | P5–P9 |
 | **Blocks** | P12 |
 | **Effort (estimate)** | 4–5 days |
@@ -15,7 +15,7 @@
 | AD-19: one VPS with alerts | ADOPTED (delegated) |
 | AD-22: pilot stop rules (fed by metrics) | ADOPTED (delegated) |
 | AD-24: no secrets in logs | ADOPTED (delegated) |
-| PC-11: paid uptime-monitoring tier | PROPOSED, awaiting review |
+| PC-11: paid uptime-monitoring tier | **REJECTED** (AD-35: zero cost; free tiers) |
 | AD-34: P10 implementation choices | ADOPTED (delegated) |
 | Monitoring vendor and cost | See the [price sheet](../../architecture/architecture-decisions.md#6-cost-estimates-not-verified-recheck-before-committing) (not committed) |
 
@@ -50,7 +50,7 @@
 - **Acceptance:** all listed metrics are visible on the founder dashboard.
 
 ### P10-T3: Alerts and external uptime check
-- **Prerequisites:** T2; a vendor chosen (price sheet; PC-11 proposed).
+- **Prerequisites:** T2; free alert services (AD-35: zero cost; PC-11 rejected).
 - **Deliverables:** alert rules sent to the founder by phone or email, not via a WhatsApp channel that may itself be down; an external uptime check.
 - **Tests:** **each alert fires in a drill: kill the ingress, disconnect a session, fill the DLQ, fail a backup.**
 - **Acceptance:** all four drills produce an alert to the founder.

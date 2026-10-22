@@ -15,7 +15,7 @@
 |---|---|
 | AD-05: OpenWA is the intended provider; gates G1–G5 are mandatory | APPROVED |
 | AD-06: Meta Cloud API is the alternative; insurance track | APPROVED |
-| AD-08: lawyer and accountant | APPROVED |
+| AD-08: lawyer and accountant | **WITHDRAWN** by the owner (AD-35) |
 | AD-18: separate ordering number plus consent | ADOPTED (delegated) |
 | V-01 to V-10 | VALIDATION-DEPENDENT ([decisions §3](../../architecture/architecture-decisions.md#3-validation-dependent-decisions-decided-only-after-the-openwa-trial)) |
 | Reduced trial variant | PROPOSED, not approved ([validation plan §9](../openwa-validation-plan.md#9-reduced-trial-variant-proposed-not-approved-2026-10-21)) |
@@ -26,7 +26,7 @@
 
 ## Scope
 - The OpenWA trial ([`openwa-validation-plan.md`](../openwa-validation-plan.md)).
-- Legal and accounting brief (AD-08).
+- ~~Legal and accounting brief (AD-08).~~ Withdrawn (AD-35: zero cost, risk accepted).
 - Merchant interviews.
 - Vendor price checks.
 - Collecting a Roman-Urdu utterance set for evaluating AI models.

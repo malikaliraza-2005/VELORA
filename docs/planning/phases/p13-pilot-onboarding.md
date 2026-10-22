@@ -15,7 +15,7 @@
 | AD-01: narrow pilot (3–5 restaurants, one city, one branch, delivery and takeaway) | APPROVED |
 | AD-05: OpenWA only after the Go; not claimed compliant | APPROVED |
 | AD-07: free or discounted pilot | APPROVED |
-| AD-08: legal brief before any real merchant is connected | APPROVED |
+| AD-08: legal brief before any real merchant is connected | **WITHDRAWN** by the owner (AD-35) |
 | AD-12: human owner verification | ADOPTED (delegated) |
 | AD-18: separate number plus written consent | ADOPTED (delegated) |
 | AD-22: stop rules | ADOPTED (delegated) |
@@ -27,8 +27,8 @@
 - **Objective:** a controlled real-world pilot.
 - **Preconditions:**
   - P12 complete.
-  - Legal brief received and consent form finalised (AD-08).
-  - Tax values confirmed (accountant).
+  - Consent form finalised (drafted by engineering; not legal advice, AD-35).
+  - Tax values set by the owner from public sources (AD-35).
   - Owner-verification runbook ready.
   - The owner approves starting the pilot.
 - **Scope:**
@@ -50,8 +50,8 @@
 - **Prerequisites:** none beyond the list.
 - **Deliverables:** a signed-off checklist:
   - P12 complete;
-  - legal brief received and consent form finalised (AD-08);
-  - tax values confirmed (accountant);
+  - consent form finalised (engineering draft, AD-35);
+  - tax values set by the owner (AD-35);
   - owner-verification runbook ready;
   - the owner approves starting the pilot;
   - pilot city chosen.
@@ -61,7 +61,7 @@
 - **Prerequisites:** T1.
 - **Deliverables, per restaurant:**
   - a verification record (AD-12);
-  - a consent record (AD-18, wording from the legal brief);
+  - a consent record (AD-18, wording from the engineering draft, AD-35);
   - a separate ordering number linked;
   - menu entered, reviewed and published (P4);
   - COD limit and transfer window set;

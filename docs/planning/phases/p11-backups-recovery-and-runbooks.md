@@ -12,7 +12,7 @@
 ## Governing decisions
 | Decision | Status |
 |---|---|
-| AD-04: managed PostgreSQL with backups | APPROVED |
+| AD-04: managed PostgreSQL with backups | APPROVED, **amended by AD-35**: PostgreSQL on the free VM; our own backups |
 | AD-21: backups and restore; RPO ≤1h, RTO ≤4h targets | ADOPTED (delegated) |
 | AD-22: stop rules | ADOPTED (delegated) |
 | V-04: inbound recovery | VALIDATION-DEPENDENT |
@@ -23,7 +23,7 @@
 ## Objective and scope
 - **Objective:** recover safely from data loss and outages.
 - **Scope:**
-  - **Backups:** provider daily backups plus **hourly encrypted logical dumps** off-site, including roles, grants and policies.
+  - **Backups:** **hourly encrypted logical dumps** to free off-site storage, including roles, grants and policies. There is no provider backup under AD-35, so these dumps and the restore drills are the only recovery.
   - **Session backups:** OpenWA session state **is not backed up off-site** unless V-07 allows it.
   - **Restore drill.**
   - **Recovery mode on startup:**

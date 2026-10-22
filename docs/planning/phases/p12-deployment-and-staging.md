@@ -12,13 +12,13 @@
 ## Governing decisions
 | Decision | Status |
 |---|---|
-| AD-04: paid managed database; always-on server | APPROVED |
+| AD-04: paid managed database; always-on server | APPROVED, **amended by AD-35**: a free always-on VM, PostgreSQL on it |
 | AD-19: one VPS for the pilot | ADOPTED (delegated) |
 | AD-24: OpenWA on a private network only; no secrets in logs | ADOPTED (delegated) |
 | V-03: VPS size and cost | VALIDATION-DEPENDENT |
 | PC-4: OpenWA hardening baseline | PROPOSED, awaiting review |
 | PC-9: same-region VPS and database | PROPOSED, awaiting review |
-| Infrastructure cost commitment | **Owner approval required** after re-checking prices ([price sheet](../../architecture/architecture-decisions.md#6-cost-estimates-not-verified-recheck-before-committing)) |
+| Infrastructure cost | **$0 a month** (AD-35). Free-tier terms to verify (B5); the old price sheet is for reference only ([price sheet](../../architecture/architecture-decisions.md#6-cost-estimates-not-verified-recheck-before-committing)) |
 
 ## Objective and scope
 - **Objective:** a hardened, repeatable deployment with a staging environment.

@@ -165,7 +165,7 @@ Any warning, restriction or ban on a test number **stops that engine's tests imm
 - **V-01 Go/No-Go:** **Go** only if all of the following hold. Otherwise **No-Go**: the owner then chooses between the Meta Cloud API (AD-06) and stopping.
   - G1–G5 each pass, or pass with a documented mitigation.
   - **Zero restrictions** occurred.
-  - The legal brief does not advise against proceeding (AD-08).
+  - ~~The legal brief does not advise against proceeding (AD-08).~~ Withdrawn by the owner (AD-35).
 - **V-02 engine:** whichever has the better G4 and G5 results.
 - **V-04 recovery design:**
 
