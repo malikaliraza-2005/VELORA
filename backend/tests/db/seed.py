@@ -226,6 +226,19 @@ def seed_tenant(conn: psycopg.Connection[Any], slug: str, prefix: str) -> dict[s
             "VALUES (%s, %s, %s, %s, 'done', 200, %s, %s) RETURNING id",
             (t, ids["staff_sessions"], secrets.token_hex(16), secrets.token_bytes(32), now, now),
         )
+        # P10: one handoff to staff and one refused webhook.
+        ids["handoff_events"] = _one(
+            conn,
+            "INSERT INTO velora.handoff_events (tenant_id, conversation_id, reason, created_at) "
+            "VALUES (%s, %s, 'requested', %s) RETURNING id",
+            (t, conv, now),
+        )
+        ids["ingress_rejections"] = _one(
+            conn,
+            "INSERT INTO velora.ingress_rejections (tenant_id, channel_id, reason, created_at) "
+            "VALUES (%s, %s, 'signature', %s) RETURNING id",
+            (t, ch, now),
+        )
     return ids
 
 

@@ -18,6 +18,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from velora import __version__
 from velora.api import channels, conversations, menu, ordering, orders, payments, summary
+from velora.api.correlation import CorrelationMiddleware
 from velora.api.deps import Services
 from velora.api.idempotency import (
     IdempotencyMiddleware,
@@ -83,6 +84,7 @@ def build_services(
         login_limiter=RateLimiter(LOGIN_RATE_LIMIT, LOGIN_RATE_WINDOW, clock),
         idempotency=IdempotencyStore(database, clock),
         channels=ChannelService(database, providers, clock),
+        database=database,
     )
 
 
@@ -134,10 +136,24 @@ def create_app(
 
     app.add_middleware(IdempotencyMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
+    # Outermost, so every log line of a request carries its correlation id.
+    app.add_middleware(CorrelationMiddleware)
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
+        """Liveness: the process answers."""
         return {"status": "ok"}
+
+    @app.get("/readyz")
+    async def readyz(request: Request) -> JSONResponse:
+        """Readiness, for the monitor's probe and the external uptime check (P10-T3): the
+        database answers. Says nothing else about the deployment."""
+        services: Services | None = request.app.state.services
+        if services is None or not await services.ping():
+            return JSONResponse(
+                {"status": "unavailable"}, status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        return JSONResponse({"status": "ok"})
 
     app.include_router(router)
     app.include_router(menu.router)

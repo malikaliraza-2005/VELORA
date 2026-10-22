@@ -62,7 +62,7 @@ async def _run(settings: Settings, app_url: str, dispatcher_url: str) -> None:
 
 def main() -> int:
     settings = Settings.from_env()
-    configure_logging(settings.log_level)
+    configure_logging(settings.log_level, fmt=settings.log_format)
     app_url, dispatcher_url = settings.database_url, settings.dispatcher_database_url
     if app_url is None or dispatcher_url is None:
         print("VELORA_DATABASE_URL and VELORA_DISPATCHER_DATABASE_URL must be set", file=sys.stderr)

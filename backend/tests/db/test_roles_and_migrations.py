@@ -25,7 +25,8 @@ def test_runtime_role_cannot_bypass_rls(db: PgDatabase) -> None:
 
 
 @pytest.mark.parametrize(
-    "role", [OWNER_ROLE, "velora_resolver", "velora_platform", "velora_dispatcher"]
+    "role",
+    [OWNER_ROLE, "velora_resolver", "velora_platform", "velora_dispatcher", "velora_monitor"],
 )
 def test_other_roles_are_not_privileged(db: PgDatabase, role: str) -> None:
     with db.admin() as conn:
@@ -36,7 +37,9 @@ def test_other_roles_are_not_privileged(db: PgDatabase, role: str) -> None:
     assert row == (False, False, False)
 
 
-@pytest.mark.parametrize("role", [APP_ROLE, "velora_platform", "velora_dispatcher"])
+@pytest.mark.parametrize(
+    "role", [APP_ROLE, "velora_platform", "velora_dispatcher", "velora_monitor"]
+)
 def test_runtime_roles_own_nothing(db: PgDatabase, role: str) -> None:
     with db.admin() as conn:
         owned = conn.execute(

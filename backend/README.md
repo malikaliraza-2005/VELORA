@@ -128,3 +128,18 @@ endpoint and inbound reconciliation are not built**: they wait for the live vali
 ```bash
 python -m velora.workers   # VELORA_DATABASE_URL (app_rw) + VELORA_DISPATCHER_DATABASE_URL
 ```
+
+## Monitoring and alerting (P10, provider-neutral)
+
+- **Logs** are one JSON object per line (`VELORA_LOG_FORMAT=text` for a readable local log), with `tenant_id` and `correlation_id`. Every string is redacted first (`velora/redaction.py`), including cookies and session cookies. Each request gets a correlation id (the caller's `X-Request-ID` if well formed), returned in `X-Request-ID`; each worker round gets its own.
+- `/healthz` says the process answers; `/readyz` also checks the database (503 otherwise). The monitor and the external uptime check use `/readyz`.
+- `src/velora/monitoring/`: the founder's monitor. It reads as `velora_monitor`, which sees statuses, timestamps, ids and tenant names across tenants, never content (migration 0012; `tests/monitoring/test_monitor_role.py`).
+- Alerts go by email and/or a JSON webhook, never WhatsApp. Each problem is sent once, again when it grows or every 4 hours, and when it clears; `alert_events` records them.
+
+```bash
+python -m velora.monitoring run            # the loop: alerts every minute, daily report at 09:00 PKT
+python -m velora.monitoring status         # every metric and the alerts that would fire now
+python -m velora.monitoring daily --day 2026-10-21   # pilot metrics per restaurant
+python -m velora.monitoring record-backup --ok --kind hourly-dump   # for the P11 backup job
+python -m velora.monitoring test-alert     # check that alerts reach you
+```

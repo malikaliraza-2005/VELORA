@@ -12,6 +12,10 @@
 --                    owns nothing, works one tenant at a time under the tenant expression.
 --   velora_dispatcher Worker work discovery (P5). NOBYPASSRLS, owns nothing. May read only
 --                    tenant ids and queue-timing columns across tenants, never a payload.
+--   velora_monitor   The founder's monitor (`python -m velora.monitoring`, P10). NOBYPASSRLS, owns
+--                    nothing. May read counts and timestamps across tenants (status, timing
+--                    and tenant-name columns only, never a payload or a customer), and append
+--                    backup and alert records.
 
 DO $$
 BEGIN
@@ -30,6 +34,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'velora_dispatcher') THEN
         CREATE ROLE velora_dispatcher;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'velora_monitor') THEN
+        CREATE ROLE velora_monitor;
+    END IF;
 END
 $$;
 
@@ -43,11 +50,14 @@ ALTER ROLE velora_platform
     LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
 ALTER ROLE velora_dispatcher
     LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
+ALTER ROLE velora_monitor
+    LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
 
 ALTER ROLE velora_owner SET search_path = velora;
 ALTER ROLE app_rw SET search_path = velora;
 ALTER ROLE velora_platform SET search_path = velora;
 ALTER ROLE velora_dispatcher SET search_path = velora;
+ALTER ROLE velora_monitor SET search_path = velora;
 
 -- The migrator must be able to hand the resolver function to velora_resolver, but must not
 -- inherit its privileges (or its RLS policy).

@@ -35,6 +35,7 @@ APP_ROLE = "app_rw"
 OWNER_ROLE = "velora_owner"
 PLATFORM_ROLE = "velora_platform"
 DISPATCHER_ROLE = "velora_dispatcher"
+MONITOR_ROLE = "velora_monitor"
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,9 @@ class PgDatabase:
     def dispatcher(self) -> psycopg.Connection[Any]:
         return psycopg.connect(self.cluster.url(self.name, DISPATCHER_ROLE))
 
+    def monitor(self) -> psycopg.Connection[Any]:
+        return psycopg.connect(self.cluster.url(self.name, MONITOR_ROLE))
+
 
 @pytest.fixture(scope="session")
 def cluster() -> Cluster:
@@ -119,7 +123,7 @@ def _prepare_cluster(admin_url: str) -> Cluster:
     setup_roles(admin_url)
     passwords = {
         role: secrets.token_urlsafe(24)
-        for role in (OWNER_ROLE, APP_ROLE, PLATFORM_ROLE, DISPATCHER_ROLE)
+        for role in (OWNER_ROLE, APP_ROLE, PLATFORM_ROLE, DISPATCHER_ROLE, MONITOR_ROLE)
     }
     with psycopg.connect(admin_url, autocommit=True) as conn:
         for role, password in passwords.items():

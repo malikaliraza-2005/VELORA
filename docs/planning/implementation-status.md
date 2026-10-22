@@ -21,10 +21,11 @@
 | **P7** | **Provider-neutral part built (2026-10-21).** Authorised by the owner ("Start P7"). Built under AD-25 against the `FakeProvider`. Choices recorded in AD-31. See "P7 task evidence". |
 | **P8** | **Provider-neutral part built (2026-10-21).** Authorised by the owner ("Start P8"). Built under AD-25 against the `FakeProvider`. Choices recorded in AD-32. Each restaurant must enter its account details before transfer is offered. See "P8 task evidence". |
 | **P9** | **Provider-neutral part built (2026-10-22).** Authorised by the owner ("Start P9"). Built under AD-25 against the `FakeProvider`. Choices recorded in AD-33. The staging end-to-end run with a test number and the usability check with kitchen staff (P9-T8) wait for the Go, P12 and P13. See "P9 task evidence". |
-| **P10–P13** | **Not started. Not authorised.** |
+| **P10** | **Provider-neutral part built (2026-10-22).** Authorised by the owner ("Start P10"), read as the provider-neutral part before the Go, like P5–P9 (to be confirmed, AD-34). Built against the `FakeProvider`. Structured logs, the monitor role and metrics, alerts with the four drills, and the founder's status and daily metrics. **No alert vendor is chosen or paid for (PC-11)**, so real delivery to the founder is not yet verified. See "P10 task evidence". |
+| **P11–P13** | **Not started. Not authorised.** |
 | **Provider-neutral track (AD-25)** | Owner decision 2026-10-21: the provider-neutral parts of P5, and P6–P9, may be built against the `FakeProvider` before the OpenWA Go, each once it is authorised. |
-| **OpenWA adapter, real WhatsApp traffic, P10–P13** | **Blocked** until the live validation is complete and the owner gives a Go (V-01). |
-| **Application code** | P1 skeleton, the P2 database layer, P3 staff identity (login, sessions, roles, PINs, audit, founder onboarding tool), P4 menu and ordering controls (versioned catalogue, CSV import, publish and rollback, availability, pause, capacity, settings, server-side pricing), and the P5 provider-neutral messaging core (provider interface, FakeProvider, durable inbox and outbox, channel state machine, circuit breaker, global pause, worker loop, log redaction). P6 conversations (engine, commands, numbered menus, AI proposals via Groq, cart, checkout, templated summary, handoff). P7 order lifecycle (YES nonce, order transaction, transition table, timers, status messages, recovery hook, staff order API). P8 payment verification (append-only ledger, reference + PIN verification, duplicate references, late-payment review, owner reconciliation and reversal, COD blocklist, transfer details, customer evidence). P9 staff dashboard (installable PWA in `web/`: order board, payments, chats, menu availability, controls, today summary, WhatsApp status and QR re-link, staff, settings; idempotency keys on every action; CSP with Trusted Types; browser tests). No real WhatsApp connection. |
+| **OpenWA adapter, real WhatsApp traffic, P11–P13** | **Blocked** until the live validation is complete and the owner gives a Go (V-01). |
+| **Application code** | P1 skeleton, the P2 database layer, P3 staff identity (login, sessions, roles, PINs, audit, founder onboarding tool), P4 menu and ordering controls (versioned catalogue, CSV import, publish and rollback, availability, pause, capacity, settings, server-side pricing), and the P5 provider-neutral messaging core (provider interface, FakeProvider, durable inbox and outbox, channel state machine, circuit breaker, global pause, worker loop, log redaction). P6 conversations (engine, commands, numbered menus, AI proposals via Groq, cart, checkout, templated summary, handoff). P7 order lifecycle (YES nonce, order transaction, transition table, timers, status messages, recovery hook, staff order API). P8 payment verification (append-only ledger, reference + PIN verification, duplicate references, late-payment review, owner reconciliation and reversal, COD blocklist, transfer details, customer evidence). P9 staff dashboard (installable PWA in `web/`: order board, payments, chats, menu availability, controls, today summary, WhatsApp status and QR re-link, staff, settings; idempotency keys on every action; CSP with Trusted Types; browser tests). P10 monitoring (JSON logs with tenant and correlation ids, `/readyz`, the `velora_monitor` role, metrics, alert rules with email and webhook delivery, heartbeat, founder status and daily pilot metrics). No real WhatsApp connection. |
 | **Purchases / subscriptions** | None. |
 
 **What the owner can provide right now:**
@@ -53,7 +54,7 @@ A reduced live-trial variant that fits these constraints is **proposed, not appr
 | [P7 Order lifecycle](phases/p07-order-lifecycle.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). The P11 drill also exercises the recovery hook | PR #9; CI run 39636189526 (702 tests). See "P7 task evidence" | Owner: review AD-31 |
 | [P8 Payment verification](phases/p08-payment-verification.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). Evidence media for staff: P5-T2 | PR #10; CI run 39641355254 (761 tests). See "P8 task evidence" | Owner: review AD-32 |
 | [P9 Staff dashboard](phases/p09-staff-dashboard.md) | **Provider-neutral part built** (2026-10-22) | Staging E2E with a test number: Go (V-01) and P12. Usability check: P13 | PR #12; CI run 39775329133 (810 tests). See "P9 task evidence" | Owner: review AD-33 |
-| [P10 Monitoring](phases/p10-monitoring-and-alerting.md) | Not started — blocked | P5–P9 | — | — |
+| [P10 Monitoring](phases/p10-monitoring-and-alerting.md) | **Provider-neutral part built** (2026-10-22) | Real alert delivery: a vendor (PC-11). Daily metrics in staging: P12. HMAC-failure alert from real webhooks: P5-T3 | PR #15; CI run 39808148631 (929 tests). See "P10 task evidence" | Owner: review AD-34; choose the alert vendor |
 | [P11 Backups and recovery](phases/p11-backups-recovery-and-runbooks.md) | Not started — blocked | P2, P5, P7; V-07 | — | — |
 | [P12 Deployment and staging](phases/p12-deployment-and-staging.md) | Not started — blocked | P10, P11; V-03 | — | — |
 | [P13 Pilot onboarding](phases/p13-pilot-onboarding.md) | Not started — blocked | P12; legal brief; consent form; tax confirmation; owner approval | — | — |
@@ -323,6 +324,28 @@ Only the provider-neutral track that AD-25 allows was built. Implementation choi
 - **P12:** serve `velora.asgi:app` behind TLS with HSTS, and trust proxy headers.
 - **P13:** the usability check and the staging end-to-end run.
 
+## P10 task evidence (2026-10-22)
+
+Only the provider-neutral part was built (see AD-34 on the scope). Implementation choices are recorded as **ADOPTED (delegated)** in decision AD-34, for owner review. The monitor's database tests use a database of their own, so its cross-tenant counts are exact.
+
+| Task | Status | Evidence (tests in `backend/tests/`) |
+|---|---|---|
+| P10-T1 Structured logging with redaction | Done | `test_structured_logs.py`: **the log redaction test finds no secrets**: fake secrets seeded into requests (bearer token, session cookie, CSRF token, query, JSON body, phone number), a webhook that fails verification, and an exception with its traceback, logged carelessly on purpose; none appear, and every line is JSON. Correlation ids are echoed in `X-Request-ID` and appear on the request's log lines; tenant and correlation ids nest and restore. The P5 redaction tests still pass |
+| P10-T2 Metrics | Done | `monitoring/test_metrics.py`: **each metric changes when its condition is simulated**: inbox and outbox queue age, dead letters (inbox and outbox), messages held for a down channel, channel state changes and time in `needs_qr`, refused webhooks by reason, backup runs, the order funnel, the global pause. `monitoring/test_monitor_role.py`: what `velora_monitor` may and may not read (no payload, message, address, amount, reference or customer), that it changes nothing else, and that the runtime can't see its records |
+| P10-T3 Alerts and external uptime check | Done in code; **real delivery gated** | `monitoring/test_drills.py`: **all four drills produce an alert** through the real monitor loop and database (the API stops answering, a session is unlinked, the dead-letter queue fills, a backup fails); each is sent once, recorded in `alert_events`, and cleared; a restarted monitor doesn't repeat it; an unreadable database is itself an alert. `monitoring/test_alerts.py`: every rule; sent once, reminded after 4 hours, re-sent when it grows, retried when undelivered, resolved; email and webhook notifiers (also over real HTTP); the heartbeat and readiness probe; settings refuse a deployment with no way to reach the founder, or without https. **Delivery to the founder's real phone or email needs a vendor (PC-11)** and is checked in staging with `python -m velora.monitoring test-alert` |
+| P10-T4 Founder dashboard and daily pilot metrics | Done (staging run gated by P12) | `monitoring/test_metrics.py`: the daily metrics per restaurant (orders, completed, completed without a human, cancelled, handoffs, disconnects, minutes needing a QR scan, payment verifications, dead letters); each handoff is recorded once. The founder's dashboard is `python -m velora.monitoring status` and `daily`, checked by hand on a scratch database. **Produced daily in staging:** P12 |
+
+**Verified in CI:** [run 39808148631](https://github.com/malikaliraza-2005/VELORA/actions/runs/39808148631) (PR #15). 929 tests passed against PostgreSQL 17, including the browser tests, and the secret scan was clean.
+
+**P10 exit criteria:**
+- **Each alert fires in a drill (kill the ingress, disconnect a session, fill the DLQ, fail a backup):** met in automated drills against the `FakeProvider`, with a recording notifier. The same drills with a real alert vendor are part of staging (P12).
+- **The log redaction test finds no secrets:** met.
+
+**Findings for later phases:** see AD-34. In short:
+- **P5-T3:** the webhook endpoint must call `Ingress.reject` for each refused webhook.
+- **P11:** the backup job reports each run with `python -m velora.monitoring record-backup`.
+- **P12:** run the monitor as its own container; set the probe URL, the heartbeat, an external `/readyz` check and the alert vendor.
+
 ## Resuming the live test
 
 The owner provides:
@@ -347,13 +370,14 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 | B5 | Vendor prices not fully verified (see price sheet) | Infrastructure commitment (P12) | Engineering |
 | B6 | AI model not selected (no real dataset). Groq gpt-oss-20b is the built adapter (AD-30), but the selection needs the P0-F6 evaluation | Pilot use of AI | Engineering |
 | B7 | ~~Delivery channel for staff magic links undecided~~ **Resolved for the pilot:** manual delivery (AD-27, ADOPTED (delegated)). Email is a later option | — | Engineering |
-| B8 | Owner authorisation for P10–P13 (P1 to P8 authorised 2026-10-21, P9 on 2026-10-22; P5 to P9 for their provider-neutral parts only) | P10 onwards | Owner |
+| B8 | Owner authorisation for P11–P13 (P1 to P8 authorised 2026-10-21, P9 and P10 on 2026-10-22; P5 to P10 for their provider-neutral parts only) | P11 onwards | Owner |
+| B11 | Alert vendor not chosen or paid for (PC-11: uptime check, heartbeat, SMS or push, email) | Real alert delivery to the founder (P10-T3 in staging) | Owner (cost) + engineering |
 | B10 | Groq's free tier vs AD-04 (paid tier, no training on our data). Groq's training terms are unverified | Sending real customer messages to the AI | Owner |
 | B9 | Reduced trial variant and trial tooling (P0-E1) not approved | Resuming the live test | Owner |
 
 ## Decisions awaiting the owner
 
-- Review the **ADOPTED (delegated)** decisions AD-11 to AD-24 and AD-26 to AD-33 ([decisions §8](../architecture/architecture-decisions.md#8-items-for-owner-review)).
+- Review the **ADOPTED (delegated)** decisions AD-11 to AD-24 and AD-26 to AD-34 ([decisions §8](../architecture/architecture-decisions.md#8-items-for-owner-review)).
 - Approve or reject the **reduced live-trial variant** ([validation plan §9](openwa-validation-plan.md)).
 - **Go/No-Go and V-01 to V-10:** after the live trial.
 - **Infrastructure cost commitment:** after vendor checks.
@@ -364,6 +388,7 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 
 | Date | Change |
 |---|---|
+| 2026-10-22 | Owner authorised **P10** ("Start P10"). Built the provider-neutral part: JSON logs with tenant and correlation ids (cookies now redacted too), `/readyz`, the `velora_monitor` role and migration 0012, metrics, alert rules with email and webhook delivery and a heartbeat, the four drills, and the founder's `status` and `daily` commands (PR #15, CI run 39808148631; 929 tests). Decision AD-34 recorded as ADOPTED (delegated). No alert vendor chosen (B11). |
 | 2026-10-22 | Added a local testing tool (`python -m velora.dev`: demo restaurant, dashboard, simulated WhatsApp customer) and the guide [`local-testing-guide.md`](local-testing-guide.md). The Menu screen gained draft review, CSV import, publishing and rollback, which a fresh restaurant needs before it can take orders. Checked by hand end to end on a fresh install: order on simulated WhatsApp → dashboard → accept → the customer's status messages. |
 | 2026-10-22 | Owner authorised **P9** ("Start P9"). Built the provider-neutral part: the staff dashboard PWA in `web/`, idempotency keys on every action (migration 0011), the chat reply, channel and QR re-link, summary, late-payment and confirmer endpoints, security headers, and browser tests in headless Chromium (PR #12, CI run 39775329133; 810 tests). Decision AD-33 recorded as ADOPTED (delegated). |
 | 2026-10-21 | Owner authorised **P6** ("Start P6") and asked to consider Groq as a free LLM. Built the provider-neutral part: engine, commands, renderer, AI proposals with a Groq adapter, cart and checkout, handoff, and the offline harness (PR #7, CI run 39613089570; migration 0008; 652 tests). Decision AD-30 recorded as ADOPTED (delegated). Groq's free tier for real customer messages conflicts with AD-04 and is left to the owner (B10). |

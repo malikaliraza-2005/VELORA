@@ -12,5 +12,5 @@ from velora.messaging.registry import build_providers
 from velora.redaction import configure_logging
 
 settings = Settings.from_env()
-configure_logging(settings.log_level)
+configure_logging(settings.log_level, fmt=settings.log_format)
 app = create_app(settings, providers=build_providers(settings))

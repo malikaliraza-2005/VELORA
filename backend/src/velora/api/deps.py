@@ -21,11 +21,13 @@ from velora.api.idempotency import IdempotencyStore, claim_request
 from velora.clock import Clock
 from velora.config import Settings
 from velora.conversation.service import ConversationService
+from velora.db import Database
 from velora.identity.permissions import Permission
 from velora.identity.ratelimit import RateLimiter
 from velora.identity.sessions import SessionService, StaffSession
 from velora.identity.staff import StaffService
 from velora.identity.tokens import csrf_matches
+from velora.logcontext import bind_tenant
 from velora.menu.service import MenuService
 from velora.messaging.channel_admin import ChannelService
 from velora.ordering.service import OrderingService
@@ -51,6 +53,10 @@ class Services:
     login_limiter: RateLimiter
     idempotency: IdempotencyStore
     channels: ChannelService
+    database: Database
+
+    async def ping(self) -> bool:
+        return await self.database.ping()
 
 
 def get_services(request: Request) -> Services:
@@ -73,6 +79,7 @@ async def current_session(request: Request, services: ServicesDep) -> StaffSessi
     session = await services.sessions.authenticate(request.cookies.get(SESSION_COOKIE))
     if session is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "not signed in")
+    bind_tenant(session.tenant)
     if request.method not in SAFE_METHODS:
         check_origin(request, services.settings)
         if not csrf_matches(session.token, request.headers.get(CSRF_HEADER)):

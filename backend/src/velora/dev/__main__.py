@@ -7,6 +7,8 @@ link                    print a new owner login link (links last 15 minutes)
 api                     run the API and the staff dashboard on VELORA_PUBLIC_BASE_URL
 customer [--phone P]    chat as a WhatsApp customer. This also runs the worker (inbox,
                         outbox, timers, health poll), so keep it open while you test.
+monitor ARGS...         the founder's monitor (P10) on the demo database, e.g.
+                        `monitor status` or `monitor daily --day 2026-10-21`
 
 Settings come from `.env.dev` in the repository root (written by `setup`); your own `.env`
 is never read or changed. Development only. This is a composition root: it may wire in the
@@ -48,7 +50,7 @@ from velora.workers.runner import Worker
 ENV_FILE = Path(__file__).resolve().parents[4] / ".env.dev"
 DATABASE = "velora_dev"
 PORT = 8000
-ROLES = ("velora_owner", "app_rw", "velora_platform", "velora_dispatcher")
+ROLES = ("velora_owner", "app_rw", "velora_platform", "velora_dispatcher", "velora_monitor")
 # psycopg's async mode cannot use the Windows proactor event loop.
 LOOP = asyncio.SelectorEventLoop if sys.platform == "win32" else None
 
@@ -119,9 +121,11 @@ def setup(admin_url: str, *, reset: bool) -> None:
         "# Written by `python -m velora.dev setup`. Local development only; never commit.\n"
         "VELORA_ENV=development\n"
         "VELORA_LOG_LEVEL=INFO\n"
+        "VELORA_LOG_FORMAT=text\n"
         f"VELORA_PUBLIC_BASE_URL={base_url}\n"
         f"VELORA_DATABASE_URL={urls['app_rw']}\n"
         f"VELORA_DISPATCHER_DATABASE_URL={urls['velora_dispatcher']}\n"
+        f"VELORA_MONITOR_DATABASE_URL={urls['velora_monitor']}\n"
         f"VELORA_PLATFORM_DATABASE_URL={urls['velora_platform']}\n"
         f"VELORA_MIGRATION_DATABASE_URL={urls['velora_owner']}\n"
         "VELORA_OPERATOR=velora.dev\n"
@@ -251,6 +255,8 @@ def main() -> int:
     commands.add_parser("api")
     chat = commands.add_parser("customer")
     chat.add_argument("--phone", default="+923001234567")
+    watch = commands.add_parser("monitor")
+    watch.add_argument("rest", nargs=argparse.REMAINDER, help="velora.monitoring arguments")
     args = parser.parse_args()
     if args.command == "setup":
         setup(args.admin_url, reset=args.reset)
@@ -258,6 +264,11 @@ def main() -> int:
         link()
     elif args.command == "api":
         api()
+    elif args.command == "monitor":
+        _load_env()
+        from velora.monitoring.__main__ import main as monitoring  # noqa: PLC0415
+
+        return monitoring(args.rest)
     else:
         with contextlib.suppress(KeyboardInterrupt):
             asyncio.run(_customer(args.phone), loop_factory=LOOP)
