@@ -60,6 +60,7 @@ export const MOVE_LABELS = {
   ready: "Ready for pickup",
   out_for_delivery: "Out for delivery",
   completed: "Done",
+  refund_pending: "Refund",
 };
 
 export const ROLE_LABELS = {
