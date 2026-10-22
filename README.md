@@ -28,6 +28,8 @@ uv run pytest    # run the tests
 
 The full list of checks is in [`backend/README.md`](backend/README.md).
 
+To try the whole product by hand (dashboard plus a simulated WhatsApp customer), follow [`docs/planning/local-testing-guide.md`](docs/planning/local-testing-guide.md).
+
 ## Configuration and secrets
 
 - Configuration comes from environment variables. The only committed file is [`.env.example`](.env.example), and it holds **placeholders only**; a test enforces this.

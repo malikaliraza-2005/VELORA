@@ -30,6 +30,7 @@ from tests.web.conftest import (
     wait_until,
 )
 from velora.clock import SystemClock
+from velora.dev.demo import SAMPLE_MENU_CSV
 from velora.messaging.channels import ChannelMonitor
 from velora.messaging.outbox import OutboxSender
 
@@ -341,3 +342,55 @@ def test_offline_actions_are_refused_visibly_and_nothing_is_queued(
     assert _query(
         db, "SELECT count(*) FROM velora.order_transitions WHERE order_id = %s", order
     ) == [(0,)]
+
+
+# P9-T5: menu ----------------------------------------------------------------------------------
+
+
+def test_the_owner_reviews_and_publishes_an_imported_menu(
+    context: BrowserContext, shop: Shop
+) -> None:
+    owner = sign_in(context, shop.owner_link)
+    owner.click("nav a[data-view=menu]")
+    expect(owner.locator("#menu-draft")).to_contain_text("No draft")
+    owner.fill("textarea[name=csv]", SAMPLE_MENU_CSV)
+    owner.get_by_role("button", name="Import into draft").click()
+    expect(owner.locator("#menu-draft")).to_contain_text("Draft version 1")
+    expect(owner.locator("#menu-draft")).to_contain_text("Added: BIRYANI")
+
+    owner.once("dialog", lambda d: d.accept())
+    owner.get_by_role("button", name="Publish this draft").click()
+    expect(owner.locator(".view-menu")).to_contain_text("Live menu, version 1")
+    biryani = owner.locator("li[data-sku=BIRYANI]")
+    biryani.get_by_role("button", name="Mark sold out").click()
+    expect(biryani).to_contain_text("Sold out")
+    # A 204 answer refreshes the screen without an error.
+    expect(owner.locator(".toast-error")).to_have_count(0)
+
+
+def test_a_bad_csv_lists_every_problem(context: BrowserContext, shop: Shop) -> None:
+    owner = sign_in(context, shop.owner_link)
+    owner.click("nav a[data-view=menu]")
+    owner.fill(
+        "textarea[name=csv]",
+        "kind,category,sku,name,price,description,group,min,max\n"
+        "item,Burgers,ZINGER,Zinger,abc,,,,\nitem,Burgers,ZINGER,Again,100,,,,\n",
+    )
+    owner.get_by_role("button", name="Import into draft").click()
+    error = owner.locator("#menu-draft .form-error")
+    expect(error).to_contain_text("Line 2")
+    expect(error).to_contain_text("Line 3")
+
+
+def test_setting_the_pin_on_the_me_screen(context: BrowserContext, shop: Shop) -> None:
+    owner = sign_in(context, shop.owner_link)
+    owner.click("nav a[data-view=me]")
+    fields = owner.locator(".view-me input[type=password]")
+    fields.nth(1).fill("480135")
+    fields.nth(2).fill("480136")
+    owner.get_by_role("button", name="Save PIN").click()
+    expect(owner.locator(".view-me .form-error")).to_have_text("The two new PINs don't match.")
+    fields.nth(2).fill("480135")
+    owner.get_by_role("button", name="Save PIN").click()
+    expect(owner.locator(".view-me .ok")).to_have_text("PIN saved.")
+    expect(owner.locator(".toast-error")).to_have_count(0)

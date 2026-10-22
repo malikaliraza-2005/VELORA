@@ -58,7 +58,9 @@ export function actionForm(children, { method, path, body, check, done, submitLa
       await done(result, form);
       action = new Action(method, path, () => body(form));
     } catch (e) {
-      error.textContent = e.message;
+      // A menu CSV can fail several checks at once; list each one.
+      const problems = (e.body && Array.isArray(e.body.problems)) ? e.body.problems : [];
+      error.textContent = [e.message, ...problems.map((p) => `${p.line ? `Line ${p.line}: ` : ""}${p.message}`)].join("\n");
       if (!(e instanceof OfflineError)) action = new Action(method, path, () => body(form));
     } finally {
       submit.disabled = false;

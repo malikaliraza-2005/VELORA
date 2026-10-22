@@ -16,7 +16,7 @@ SameSite=Strict and HttpOnly.
 | `assets/js/main.js` | Login (token from the URL fragment), role-scoped navigation, banners, polling |
 | `assets/js/api.js` | Fetch wrapper: CSRF header, an `Idempotency-Key` per action, refusal while offline |
 | `assets/js/dom.js`, `ui.js`, `format.js` | DOM building (no HTML strings), action buttons and forms, display formats |
-| `assets/js/views/` | One module per screen: board, payment panel, payments, chats, menu, controls, summary, WhatsApp, staff, settings, me |
+| `assets/js/views/` | One module per screen: board, payment panel, payments, chats, menu (availability, draft review, CSV import, publish, rollback), controls, summary, WhatsApp, staff, settings, me |
 
 ## Rules
 
@@ -29,14 +29,9 @@ SameSite=Strict and HttpOnly.
 
 ## Running it locally
 
-```bash
-cd backend
-VELORA_ENV=development VELORA_DATABASE_URL=postgresql://app_rw:...@127.0.0.1:55432/velora \
-VELORA_PUBLIC_BASE_URL=http://127.0.0.1:8000 uv run uvicorn velora.asgi:app --port 8000
-```
-
-Sign in with an owner link from the founder's tool (`python -m velora.admin`), which points at
-`VELORA_PUBLIC_BASE_URL/login#…`.
+Follow [`../docs/planning/local-testing-guide.md`](../docs/planning/local-testing-guide.md):
+`python -m velora.dev setup`, then `python -m velora.dev api` serves the dashboard on
+http://127.0.0.1:8000 and `python -m velora.dev customer` plays a WhatsApp customer.
 
 The browser tests are in `backend/tests/web/` (Playwright, headless Chromium). Install the
 browser once with `uv run playwright install chromium`.

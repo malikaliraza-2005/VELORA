@@ -52,7 +52,7 @@ a { color: var(--brand); }
 .empty { color: var(--muted); font-style: italic; }
 .ok { color: var(--ok); font-weight: 600; }
 .warn { color: var(--warn); font-weight: 600; }
-.form-error { color: var(--error); font-weight: 600; min-height: 1em; margin: 0.4rem 0; }
+.form-error { color: var(--error); font-weight: 600; min-height: 1em; margin: 0.4rem 0; white-space: pre-line; }
 
 button { font: inherit; min-height: 44px; padding: 0.5rem 1rem; border-radius: var(--radius); border: 1px solid transparent; cursor: pointer; }
 button:disabled { opacity: 0.5; cursor: wait; }
