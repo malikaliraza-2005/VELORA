@@ -1,0 +1,17 @@
+# Rehearsal only (stack-drill.sh): an HTTPS alert sink on the egress network, and the monitor
+# trusting the sink's self-signed certificate. Never used on a server.
+
+services:
+  alert-sink:
+    image: "${VELORA_IMAGE:-velora-app}:${VELORA_IMAGE_TAG:?set by velora release}"
+    command: ["python", "/drill/alert_sink.py", "/drill/certs/sink.crt", "/drill/certs/sink.key"]
+    read_only: true
+    volumes: ["${VELORA_DRILL_DIR:?}:/drill:ro"]
+    networks: [egress]
+
+  monitor:
+    environment:
+      SSL_CERT_FILE: /drill/certs/sink.crt
+    volumes: ["${VELORA_DRILL_DIR:?}:/drill:ro"]
+    depends_on:
+      alert-sink: {condition: service_started}

@@ -8,6 +8,8 @@ run     make one backup and upload it; reports the run to the monitor (hourly fr
         P12). Needs VELORA_BACKUP_DATABASE_URL, VELORA_BACKUP_PUBLIC_KEY, VELORA_BACKUP_STORAGE.
 list    complete backups in storage, oldest first.
 restore --secret-key FILE --target-db NAME [--stamp STAMP] [--json]
+        (`--secret-key -` reads the key from standard input, so it needn't be a file where
+        the restore runs, e.g. inside a container: P12)
         restore the newest (or the given) backup into a NEW database and verify it.
         Needs VELORA_ADMIN_DATABASE_URL and the storage settings.
 """
@@ -50,7 +52,7 @@ def _parser() -> argparse.ArgumentParser:
     commands.add_parser("run")
     commands.add_parser("list")
     restore = commands.add_parser("restore")
-    restore.add_argument("--secret-key", type=Path, required=True)
+    restore.add_argument("--secret-key", required=True, help="key file, or - for stdin")
     restore.add_argument("--target-db", required=True)
     restore.add_argument("--stamp")
     restore.add_argument("--json", action="store_true")
@@ -122,6 +124,12 @@ def _run(settings: BackupSettings) -> int:
     return 0
 
 
+def _read_secret(source: str) -> str:
+    if source == "-":
+        return sys.stdin.read()
+    return Path(source).read_text(encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     base = Settings.from_env()
@@ -158,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
         report = restore_backup(
             storage=storage,
             stamp=args.stamp,
-            secret=secret_key_from_text(args.secret_key.read_text(encoding="utf-8")),
+            secret=secret_key_from_text(_read_secret(args.secret_key)),
             admin_url=admin_url,
             dbname=args.target_db,
             tools=settings.tools,

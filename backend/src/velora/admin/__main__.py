@@ -3,7 +3,8 @@
 Connects as velora_platform through VELORA_PLATFORM_DATABASE_URL. Every command needs an
 operator name (`--operator`, or VELORA_OPERATOR) for the audit log.
 
-tenant-create        --slug --name --prefix
+tenant-create        --slug --name --prefix   (in staging the slug must start with
+                                               "test-": staging holds no merchant data, P12)
 tenants              list tenants with what each still needs before going live
 verification-record  --tenant --method --status [--evidence-ref] [--supersedes]
 consent-record       --tenant --kind --version (--document FILE | --sha256 HEX)
@@ -44,6 +45,9 @@ from velora.admin.onboarding import (
 )
 from velora.config import PLACEHOLDER, Settings
 from velora.menu.csv_import import CsvImportError
+
+# P12-T4: staging uses test numbers and test restaurants only.
+STAGING_SLUG_PREFIX = "test-"
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -121,6 +125,11 @@ def _menu_import(args: argparse.Namespace, ops: Onboarding, url: str) -> None:
 
 def run(args: argparse.Namespace, ops: Onboarding, settings: Settings) -> None:
     if args.command == "tenant-create":
+        if settings.env == "staging" and not args.slug.startswith(STAGING_SLUG_PREFIX):
+            raise OnboardingError(
+                f"staging is for test restaurants only: the slug must start with "
+                f"{STAGING_SLUG_PREFIX!r}"
+            )
         tenant = ops.create_tenant(slug=args.slug, display_name=args.name, order_prefix=args.prefix)
         print(f"created tenant {args.slug}: {tenant.value}")
     elif args.command == "global-pause":

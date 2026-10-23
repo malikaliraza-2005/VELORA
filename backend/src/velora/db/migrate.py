@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib import resources
 
 import psycopg
+from psycopg import sql as pgsql
 
 _FILENAME = re.compile(r"^(?P<version>\d{4})_(?P<name>[a-z0-9_]+)\.(?P<direction>up|down)\.sql$")
 
@@ -144,3 +146,43 @@ def setup_roles(conninfo: str) -> None:
     sql = resources.files("velora.db.sql").joinpath("roles.sql").read_text(encoding="utf-8")
     with psycopg.connect(conninfo) as conn, conn.transaction():
         conn.execute(sql.encode("utf-8"))
+
+
+# Login roles whose passwords `provision` sets, and the connection setting that carries each.
+ROLE_URL_SETTINGS = {
+    "velora_owner": "VELORA_MIGRATION_DATABASE_URL",
+    "app_rw": "VELORA_DATABASE_URL",
+    "velora_platform": "VELORA_PLATFORM_DATABASE_URL",
+    "velora_dispatcher": "VELORA_DISPATCHER_DATABASE_URL",
+    "velora_monitor": "VELORA_MONITOR_DATABASE_URL",
+    "velora_backup": "VELORA_BACKUP_DATABASE_URL",
+}
+
+
+def provision(admin_url: str, database: str, passwords: Mapping[str, str]) -> bool:
+    """Prepare a server for a deployment (P12): the roles, their passwords and the database.
+
+    Idempotent. Re-run it after changing a password in the deployment's settings: it sets
+    each given role's password again. Returns True if the database was created. Migrations
+    are a separate step (`migrate up`).
+    """
+    unknown = set(passwords) - set(ROLE_URL_SETTINGS)
+    if unknown:
+        raise MigrationError(f"not a VELORA login role: {sorted(unknown)}")
+    setup_roles(admin_url)
+    with psycopg.connect(admin_url, autocommit=True) as conn:
+        for role, password in sorted(passwords.items()):
+            conn.execute(
+                pgsql.SQL("ALTER ROLE {} PASSWORD {}").format(
+                    pgsql.Identifier(role), pgsql.Literal(password)
+                )
+            )
+        exists = conn.execute(
+            "SELECT 1 FROM pg_catalog.pg_database WHERE datname = %s", (database,)
+        )
+        if exists.fetchone() is not None:
+            return False
+        conn.execute(
+            pgsql.SQL("CREATE DATABASE {} OWNER velora_owner").format(pgsql.Identifier(database))
+        )
+    return True

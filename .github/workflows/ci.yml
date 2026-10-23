@@ -3,6 +3,7 @@ name: CI
 # P1-T5: lint, type checks, tests and a secret scan on every push and pull request.
 # P2-T6: the tests include the tenant-isolation suite, run against PostgreSQL.
 # P9: and the staff dashboard's browser tests, in headless Chromium.
+# P12: and a rehearsal of the deployment itself (infra/tests/stack-drill.sh).
 on:
   push:
   pull_request:
@@ -50,8 +51,27 @@ jobs:
           # Fail, rather than skip, if the database or browser tests cannot run.
           VELORA_REQUIRE_DB_TESTS: "1"
           VELORA_REQUIRE_BROWSER_TESTS: "1"
+          VELORA_REQUIRE_COMPOSE_TESTS: "1"
           VELORA_TEST_PG_TOOLS: docker exec -i velora-pg
         run: uv run pytest
+
+  # P12: the real compose stack on one runner, through the founder's `velora` tool: a first
+  # release, the edge and secrets checks, the failure drills with alerts, a release and a
+  # rollback. The record is added to the run's summary.
+  deploy:
+    name: Deployment rehearsal
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Lint the shell scripts
+        run: shellcheck infra/bin/velora infra/host/install.sh infra/tests/stack-drill.sh
+      - name: Rehearse a deployment, the failure drills, a release and a rollback
+        env:
+          VELORA_DRILL_RECORD: ${{ runner.temp }}/drill-record.md
+        run: infra/tests/stack-drill.sh
+      - name: Drill record
+        if: always()
+        run: cat "$RUNNER_TEMP/drill-record.md" >> "$GITHUB_STEP_SUMMARY" || true
 
   secret-scan:
     name: Secret scan (gitleaks)

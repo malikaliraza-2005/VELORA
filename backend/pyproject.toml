@@ -11,6 +11,8 @@ dependencies = [
     "psycopg-pool>=3.3.3",
     "psycopg[binary]>=3.3.6",
     "segno>=1.6.6",
+    # The production server (P12, `python -m velora.serve`).
+    "uvicorn>=0.54.0",
 ]
 
 [dependency-groups]
@@ -20,7 +22,6 @@ dev = [
     "playwright>=1.64.0",
     "pytest",
     "ruff",
-    "uvicorn>=0.54.0",
 ]
 
 [build-system]

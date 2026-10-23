@@ -1,0 +1,12 @@
+# Hourly backups (P11: RPO of 1 hour). Persistent: a run missed while the server was off
+# happens at the next boot.
+[Unit]
+Description=Hourly VELORA database backup
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

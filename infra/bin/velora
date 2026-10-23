@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+# The founder's deployment tool (P12). Installed as /usr/local/bin/velora by
+# infra/host/install.sh; run it with sudo on the server. See docs/operations/deployment.md.
+#
+#   velora build [REF]                 build the image for REF (default: the checkout's HEAD)
+#   velora env-init ARGS...            write /etc/velora/*.env with fresh passwords
+#                                      (python -m velora.deploy env-init --help)
+#   velora env-check                   check the settings before a release
+#   velora release REF [--first]       back up, migrate and switch to REF (--first: no
+#                                      database yet, so no backup before it)
+#   velora rollback                    switch back to the previous release's images
+#   velora status                      containers, release, and the monitor's status
+#   velora backup                      one backup now (the hourly timer runs this)
+#   velora restore ARGS...             restore into a NEW database and verify it, e.g.
+#                                      --secret-key FILE --target-db velora_restored
+#   velora admin ARGS...               onboarding tools (python -m velora.admin)
+#   velora monitor ARGS...             e.g. `velora monitor test-alert`
+#   velora db ARGS...                  e.g. `velora db migrate status`
+#   velora logs SERVICE                follow one container's (redacted) log
+#   velora compose ARGS...             docker compose for this stack
+#
+# Environment: VELORA_CONFIG_DIR (default /etc/velora), VELORA_REPO (default: this checkout),
+# VELORA_COMPOSE_EXTRA (extra compose files, colon-separated: rehearsals only).
+
+set -euo pipefail
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+REPO="${VELORA_REPO:-$(cd "$(dirname "$SELF")/../.." && pwd)}"
+CONF="${VELORA_CONFIG_DIR:-/etc/velora}"
+IMAGE="${VELORA_IMAGE:-velora-app}"
+RELEASE_FILE="$CONF/release.env"
+export VELORA_CONFIG_DIR="$CONF" VELORA_IMAGE="$IMAGE"
+
+say() { printf 'velora: %s\n' "$*" >&2; }
+die() { say "$*"; exit 1; }
+
+setting() { # setting FILE KEY -> value, or empty
+	[ -f "$1" ] || return 0
+	sed -n "s/^$2=//p" "$1" | tail -n 1
+}
+
+compose() {
+	local files=(-f "$REPO/infra/compose.yaml")
+	if [ "$(setting "$CONF/stack.env" VELORA_OPENWA)" = "enabled" ]; then
+		files+=(-f "$REPO/infra/compose.openwa.yaml")
+	fi
+	local extra
+	IFS=: read -r -a extra <<<"${VELORA_COMPOSE_EXTRA:-}"
+	for f in "${extra[@]}"; do [ -n "$f" ] && files+=(-f "$f"); done
+	local envs=(--env-file "$CONF/stack.env")
+	[ -f "$RELEASE_FILE" ] && envs+=(--env-file "$RELEASE_FILE")
+	docker compose --project-directory "$REPO/infra" "${files[@]}" "${envs[@]}" "$@"
+}
+
+current_tag() {
+	if [ -n "${VELORA_IMAGE_TAG:-}" ]; then echo "$VELORA_IMAGE_TAG"; return; fi
+	local tag
+	tag="$(setting "$RELEASE_FILE" VELORA_IMAGE_TAG)"
+	[ -n "$tag" ] || tag="$(docker image ls "$IMAGE" --format '{{.Tag}}' | head -n 1)"
+	[ -n "$tag" ] || die "no image yet: run 'velora build' first"
+	echo "$tag"
+}
+
+# The image's own tools, as the calling user, with no network: settings files only.
+tool() {
+	docker run --rm --network none --read-only --cap-drop ALL \
+		--security-opt no-new-privileges:true --user "$(id -u):$(id -g)" \
+		-v "$CONF:$CONF" "$IMAGE:$(current_tag)" python -m velora.deploy "$@"
+}
+
+build() {
+	local sha tag
+	sha="$(git -C "$REPO" rev-parse --verify "${1:-HEAD}^{commit}")"
+	tag="${sha:0:12}"
+	if docker image inspect "$IMAGE:$tag" >/dev/null 2>&1; then
+		say "image $IMAGE:$tag already built"
+	else
+		say "building $IMAGE:$tag"
+		# Exactly the committed files at that revision, never the working tree.
+		git -C "$REPO" archive --format=tar "$sha" |
+			docker build -q -f infra/docker/app.Dockerfile --build-arg VELORA_REVISION="$sha" \
+				-t "$IMAGE:$tag" - >/dev/null
+	fi
+	echo "$tag"
+}
+
+wait_ready() { # the dashboard answers through the edge, with HSTS, on a trusted certificate
+	local domain tls cacert=() headers
+	domain="$(setting "$CONF/stack.env" VELORA_DOMAIN)"
+	tls="$(setting "$CONF/stack.env" VELORA_TLS)"
+	if [ "$tls" = "internal" ]; then
+		local ca="$CONF/.caddy-root.crt"
+		compose exec -T caddy cat /data/caddy/pki/authorities/local/root.crt >"$ca"
+		cacert=(--cacert "$ca")
+	fi
+	for _ in $(seq 1 60); do
+		if headers="$(curl -fsS -D - -o /dev/null --max-time 5 "${cacert[@]}" \
+			--resolve "$domain:443:127.0.0.1" "https://$domain/readyz" 2>/dev/null)"; then
+			grep -qi '^strict-transport-security: max-age=' <<<"$headers" ||
+				die "https://$domain answers without HSTS"
+			say "https://$domain/readyz is ready"
+			return 0
+		fi
+		sleep 2
+	done
+	die "https://$domain/readyz did not become ready"
+}
+
+write_release() { # tag ref previous_tag previous_ref
+	local tmp="$RELEASE_FILE.tmp"
+	(umask 077 && printf 'VELORA_IMAGE_TAG=%s\nVELORA_RELEASE_REF=%s\nVELORA_PREVIOUS_IMAGE_TAG=%s\nVELORA_PREVIOUS_RELEASE_REF=%s\n' \
+		"$1" "$2" "$3" "$4" >"$tmp")
+	mv -f "$tmp" "$RELEASE_FILE"
+	printf '%s %s %s (previous %s)\n' "$(date -u +%FT%TZ)" "${5:-release}" "$1" "${3:-none}" \
+		>>"$CONF/releases.log"
+}
+
+switch_to() { # tag ref: run this release's compose files and images
+	git -C "$REPO" checkout -q --detach "$2"
+	VELORA_IMAGE_TAG="$1" compose up -d --remove-orphans --wait --wait-timeout 180
+}
+
+release() {
+	local ref="${1:?usage: velora release REF [--first]}" first="${2:-}"
+	local sha tag old_tag old_ref
+	sha="$(git -C "$REPO" rev-parse --verify "$ref^{commit}")"
+	old_tag="$(setting "$RELEASE_FILE" VELORA_IMAGE_TAG)"
+	old_ref="$(setting "$RELEASE_FILE" VELORA_RELEASE_REF)"
+	[ -n "$old_tag" ] || [ "$first" = "--first" ] || die "no release yet: use --first"
+	tag="$(build "$sha")"
+	export VELORA_IMAGE_TAG="$tag"
+	tool env-check --dir "$CONF"
+	if [ "$first" != "--first" ]; then
+		say "backup before the release"
+		VELORA_IMAGE_TAG="$old_tag" compose run --rm backup || die "backup failed: release stopped"
+	fi
+	git -C "$REPO" checkout -q --detach "$sha"
+	# Until the new release is recorded, a failure returns the checkout to the running one.
+	trap '[ -n "$old_ref" ] && git -C "$REPO" checkout -q --detach "$old_ref"' ERR
+	compose up -d --wait db
+	compose run --rm ops python -m velora.db provision
+	compose run --rm ops python -m velora.db migrate up
+	trap - ERR
+	write_release "$tag" "$sha" "$old_tag" "$old_ref" release
+	compose up -d --remove-orphans --wait --wait-timeout 180 ||
+		die "the new release did not start: run 'velora rollback'"
+	wait_ready || die "the new release is not answering: run 'velora rollback'"
+	say "released $tag"
+}
+
+rollback() {
+	local tag ref prev_tag prev_ref
+	tag="$(setting "$RELEASE_FILE" VELORA_IMAGE_TAG)"
+	ref="$(setting "$RELEASE_FILE" VELORA_RELEASE_REF)"
+	prev_tag="$(setting "$RELEASE_FILE" VELORA_PREVIOUS_IMAGE_TAG)"
+	prev_ref="$(setting "$RELEASE_FILE" VELORA_PREVIOUS_RELEASE_REF)"
+	[ -n "$prev_tag" ] || die "no previous release to roll back to"
+	docker image inspect "$IMAGE:$prev_tag" >/dev/null 2>&1 || die "image $IMAGE:$prev_tag is gone"
+	# Migrations are never reverted (fix forward): each release's migrations must work with
+	# the previous release's code (release checklist). If one doesn't, restore instead (R4).
+	switch_to "$prev_tag" "$prev_ref"
+	write_release "$prev_tag" "$prev_ref" "$tag" "$ref" rollback
+	wait_ready
+	say "rolled back to $prev_tag; 'velora rollback' again returns to $tag"
+}
+
+restore() {
+	local key="" args=()
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		--secret-key) key="$2"; shift 2 ;;
+		*) args+=("$1"); shift ;;
+		esac
+	done
+	[ -f "$key" ] || die "usage: velora restore --secret-key FILE --target-db NAME [--stamp STAMP]"
+	# The key goes in on standard input: never copied into a container or a volume.
+	compose run --rm -T ops python -m velora.backup restore --secret-key - "${args[@]}" <"$key"
+}
+
+lock() {
+	exec 9>"$CONF/.lock"
+	flock -n 9 || die "another velora command is running"
+}
+
+command="${1:-}"
+[ $# -gt 0 ] && shift
+case "$command" in
+build) build "$@" ;;
+env-init)
+	install -d -m 700 "$CONF"
+	tool env-init --dir "$CONF" "$@"
+	;;
+env-check) tool env-check --dir "$CONF" ;;
+release) lock; release "$@" ;;
+rollback) lock; rollback ;;
+status)
+	cat "$RELEASE_FILE" 2>/dev/null || say "no release yet"
+	compose ps
+	compose exec -T monitor python -m velora.monitoring status
+	;;
+backup) lock; compose run --rm backup ;;
+restore) restore "$@" ;;
+admin) compose run --rm ops python -m velora.admin "$@" ;;
+monitor) compose exec -T monitor python -m velora.monitoring "$@" ;;
+db) compose run --rm ops python -m velora.db "$@" ;;
+logs) compose logs -f "${1:?usage: velora logs SERVICE}" ;;
+compose) compose "$@" ;;
+*) sed -n '2,24p' "$SELF" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

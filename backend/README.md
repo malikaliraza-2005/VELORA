@@ -171,3 +171,17 @@ python -m velora.backup restore --secret-key backup.key --target-db velora_resto
 ```
 
 The full procedures are in [`../docs/operations/runbooks.md`](../docs/operations/runbooks.md).
+
+## Deployment (P12)
+
+- `python -m velora.serve`: the production server (uvicorn) for `velora.asgi:app`. Its log lines go through the redacting JSON formatter. Forwarding headers are trusted only from the addresses in `VELORA_FORWARDED_ALLOW_IPS` (the edge proxy), so the login rate limit sees real clients.
+- `python -m velora.db provision`: the roles, each role's password (from its `*_DATABASE_URL`) and the database, for a deployment. Idempotent.
+- `python -m velora.deploy env-init | env-check`: the deployment's settings files (one per container, owner-only), and their check before every release.
+- `python -m velora.deploy scan HOST`: the external port scan, run from your own computer.
+- In staging, `python -m velora.admin tenant-create` accepts only slugs starting `test-`.
+
+On a server, all of these run through `infra/bin/velora`; see [`../docs/operations/deployment.md`](../docs/operations/deployment.md).
+
+```bash
+uv run python -m velora.deploy scan <server address> --expect 443   # from your computer
+```

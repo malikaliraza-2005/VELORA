@@ -50,7 +50,7 @@
 | [P9](phases/p09-staff-dashboard.md) Staff dashboard (PWA) | Staff run orders quickly and safely | Provider-neutral part built (2026-10-22, AD-33); staging and real-WhatsApp exit tests stay gated | P3–P8 | about 2 weeks |
 | [P10](phases/p10-monitoring-and-alerting.md) Monitoring and alerting | Problems reach the founder before restaurants notice them | Provider-neutral part built (AD-34); alert vendor pending | P5–P9 | 4–5 days |
 | [P11](phases/p11-backups-recovery-and-runbooks.md) Backups, recovery and runbooks | Recover safely from data loss and outages | Built (AD-36); staging runs wait for P12 | P2, P5 (recovery mode), P7; V-07 | 4–5 days |
-| [P12](phases/p12-deployment-and-staging.md) Deployment and staging | A hardened, repeatable deployment with staging | Not authorised; blocked | P10, P11, V-03 (VPS size) | about 1 week |
+| [P12](phases/p12-deployment-and-staging.md) Deployment and staging | A hardened, repeatable deployment with staging | Built (AD-37), rehearsed in CI; the server, staging and its drills wait for V-03, B5, B12 (OpenWA parts: the Go) | P10, P11, V-03 (VPS size) | about 1 week |
 | [P13](phases/p13-pilot-onboarding.md) Pilot onboarding | A controlled real-world pilot | Not authorised; blocked; needs separate owner approval to start | P12; legal brief; consent form; tax confirmation; owner-verification runbook; owner approval | 4–8 calendar weeks |
 
 ## Security gates and exit criteria (summary)

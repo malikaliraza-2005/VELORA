@@ -1,0 +1,11 @@
+# One encrypted backup (P11-T1). Started hourly by velora-backup.timer. Each run, good or
+# failed, is reported to the monitor, which alerts when no good backup is recent enough.
+[Unit]
+Description=VELORA database backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/velora backup
+TimeoutStartSec=50min

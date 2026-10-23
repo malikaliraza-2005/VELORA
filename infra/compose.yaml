@@ -1,0 +1,146 @@
+# VELORA on one server (P12-T2, AD-19, AD-35). Run through `infra/bin/velora`, which passes
+# /etc/velora/stack.env and release.env for the variables below.
+#
+# Only Caddy publishes a port (443). Everything else is reachable only on internal networks:
+#   public  caddy                                  internet: port 443 in, certificate renewals out
+#   edge    caddy, api                             internal: HTTPS traffic, decrypted
+#   data    db, api, worker, monitor, backup, ops  internal: PostgreSQL, the monitor's probe
+#   egress  worker, monitor, backup, ops           outbound only: Groq, alerts, backup storage
+# OpenWA joins on its own internal network after the Go (compose.openwa.yaml).
+# tests/deploy/test_compose_policy.py checks these rules on every change.
+
+name: velora
+
+x-app: &app
+  image: "${VELORA_IMAGE:-velora-app}:${VELORA_IMAGE_TAG:?set by velora release}"
+  init: true
+  restart: unless-stopped
+  read_only: true
+  tmpfs: ["/tmp:size=64m"]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  logging: &logging
+    driver: local
+    options: {max-size: "10m", max-file: "5"}
+  depends_on:
+    db: {condition: service_healthy}
+
+services:
+  caddy:
+    image: caddy:2.11.7-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp:size=16m"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+    ports: ["443:443/tcp"]
+    environment:
+      VELORA_DOMAIN: "${VELORA_DOMAIN:?set in stack.env}"
+      VELORA_TLS: "${VELORA_TLS:-acme}"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      public: {}
+      edge: {ipv4_address: 172.30.10.10}
+    depends_on:
+      api: {condition: service_healthy}
+
+  api:
+    <<: *app
+    command: ["python", "-m", "velora.serve"]
+    env_file: ["${VELORA_CONFIG_DIR:-/etc/velora}/api.env"]
+    environment:
+      VELORA_HTTP_HOST: 0.0.0.0
+      VELORA_HTTP_PORT: "8000"
+      # Only Caddy's forwarding headers are trusted (the login rate limit's client address).
+      VELORA_FORWARDED_ALLOW_IPS: 172.30.10.10
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    mem_limit: 512m
+    networks: [edge, data]
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "velora.workers"]
+    env_file: ["${VELORA_CONFIG_DIR:-/etc/velora}/worker.env"]
+    # Docker is the worker's supervisor: it restarts after a crash or a failed recovery
+    # (P11), and recovery mode runs again on every start.
+    stop_grace_period: 30s
+    mem_limit: 512m
+    networks: [data, egress]
+
+  monitor:
+    <<: *app
+    command: ["python", "-m", "velora.monitoring", "run"]
+    env_file: ["${VELORA_CONFIG_DIR:-/etc/velora}/monitor.env"]
+    mem_limit: 256m
+    networks: [data, egress]
+
+  db:
+    image: postgres:17.11-bookworm@sha256:858bb5e98eed02eb8cafbcdc007f9a65d1b613972028944a8ec2133ccaf80d27
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp:size=64m", "/var/run/postgresql:size=1m"]
+    cap_drop: [ALL]
+    # The image's entrypoint prepares the data directory as root, then drops to postgres.
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+    env_file: ["${VELORA_CONFIG_DIR:-/etc/velora}/db.env"]
+    command: ["postgres", "-c", "password_encryption=scram-sha-256", "-c", "log_min_messages=warning"]
+    shm_size: 128m
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-h", "127.0.0.1", "-U", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [data]
+
+  # One-off jobs: `velora backup` (hourly, from a systemd timer) and `velora ops ...`.
+  backup:
+    <<: *app
+    profiles: [jobs]
+    restart: "no"
+    command: ["python", "-m", "velora.backup", "run"]
+    env_file: ["${VELORA_CONFIG_DIR:-/etc/velora}/backup.env"]
+    volumes: ["backup_work:/work", "backups:/backups"]
+    networks: [data, egress]
+
+  ops:
+    <<: *app
+    profiles: [jobs]
+    restart: "no"
+    command: ["python", "-m", "velora.db", "migrate", "status"]
+    env_file:
+      - "${VELORA_CONFIG_DIR:-/etc/velora}/ops.env"
+      - "${VELORA_CONFIG_DIR:-/etc/velora}/backup.env"
+    volumes: ["backup_work:/work", "backups:/backups"]
+    networks: [data, egress]
+
+networks:
+  public: {}
+  edge:
+    internal: true
+    ipam:
+      config: [{subnet: 172.30.10.0/24}]
+  data:
+    internal: true
+  egress: {}
+
+volumes:
+  pgdata: {}
+  caddy_data: {}
+  caddy_config: {}
+  backup_work: {}
+  # Only used when VELORA_BACKUP_STORAGE=file:///backups (rehearsals): real backups go off the
+  # server (B5).
+  backups: {}

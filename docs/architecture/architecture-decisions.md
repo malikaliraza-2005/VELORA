@@ -1,6 +1,6 @@
 # VELORA architecture decisions
 
-- **Last updated:** 2026-10-22
+- **Last updated:** 2026-10-23
 - **Basis:**
   - The architecture review of the research documents (Critic / Defender / Independent Judge).
   - The owner decision session (A1–A12).
@@ -784,6 +784,121 @@ Stop or pause the pilot on any of these:
   - **P13:** retention for `outbox_messages`, `inbox_events`, `conversations.context`, `pending_actions.payload` and `payment_evidence` (the P5–P8 findings) is **not** done here. Backups keep whatever the database holds, for as long as the bucket keeps them.
 - **Evidence:** see "P11 task evidence" in the status tracker. Migration 0013; tests in `backend/tests/backup/` and `backend/tests/orders/test_recovery_mode.py`.
 
+### AD-37: P12 implementation choices (deployment and staging)
+- **Status:** ADOPTED (delegated), awaiting owner review. It implements AD-19 (one server), AD-24 (security baseline) and AD-35 (zero cost: a free VM with PostgreSQL on it).
+- **Scope of the authorisation:** the owner said "Start P12" on 2026-10-23. As with P5–P11, only what works without a server or the OpenWA Go was built:
+  - **Built:** the application image, the container layout, HTTPS with Caddy, the settings files and their check, server provisioning, the host-hardening script, the release and rollback tool, the hourly backup timer, the external port scan, and a CI job that rehearses all of it on every push.
+  - **Not done, needs the owner:** the VM (V-03, B5), the hostname (B12), the alert mailbox and heartbeat (B11), the backup bucket (B5). So these are still to do:
+    - the timed from-scratch run (T6);
+    - the external scan of a real server (T1);
+    - staging (T4);
+    - a release and rollback in staging (T5);
+    - the staging drills (T7).
+  - **Not done, needs the Go (V-01):** the OpenWA container. Its compose file is written but not used, and the "kill OpenWA" and "force a disconnect" drills wait for it.
+  - Nothing was bought, deployed or connected to WhatsApp.
+- **One image for every VELORA container** (`infra/docker/app.Dockerfile`): the API, worker, monitor, backup job and the founder's tools differ only by command.
+  - It's built from the lockfile, runs as a non-root user (uid 10001), and includes the PostgreSQL 17 client tools from the PostgreSQL project's repository, with the signing key checked against its published fingerprint (the P11 finding).
+  - Base images are pinned by digest, multi-arch, so the same files build on the free arm64 VMs.
+- **The dashboard is served by the API container, not a separate web container.** The plan listed "the web app" as its own container. Serving it from the API keeps one origin, one set of security headers (CSP with Trusted Types) and the strict session cookie (AD-33). Caddy is the separate edge container.
+  - *Alternative:* Caddy serving `web/` directly. It would need the CSP and caching rules duplicated.
+- **Networks** (`infra/compose.yaml`). Only Caddy publishes a port (443). The others:
+  - `edge`, internal: Caddy and the API;
+  - `data`, internal: the database and the containers that use it;
+  - `egress`, outbound only: Groq, alerts, the backup bucket;
+  - the database is reachable from nothing else;
+  - OpenWA (after the Go) gets its own internal network, shared only with the API and worker, plus its own outbound network to reach WhatsApp.
+
+  `tests/deploy/test_compose_policy.py` checks these rules on the configuration compose actually runs: published ports, networks, capabilities, read-only filesystems, `no-new-privileges`, image pinning, restart policies, log rotation, and which settings file each container gets.
+- **Every container is locked down:** read-only filesystem, all Linux capabilities dropped, `no-new-privileges`, log rotation, a memory limit, and `init` so signals reach Python. The two exceptions are written down:
+  - Caddy keeps the right to bind port 443;
+  - PostgreSQL's entrypoint keeps the five rights it needs to prepare its data directory before dropping to its own user.
+- **HTTPS: Caddy**, with a free automatic Let's Encrypt certificate.
+  - **Port 80 stays closed**, as the plan says (443 only). Certificates are issued over 443 (the TLS-ALPN challenge), and there is no http-to-https redirect.
+  - *Trade-off:* typing `http://` into a browser fails instead of redirecting. Every link VELORA gives out is `https://`.
+  - HSTS for one year, **not preloaded**: a preload is hard to undo, and the hostname isn't settled (B12).
+  - HTTP/3 is off (UDP 443 stays closed). Caddy's admin endpoint is off, and no `Server` or `Via` header names the software.
+- **Proxy headers** (P3 and P9 findings):
+  - Caddy has a fixed address on the edge network, and the API trusts `X-Forwarded-For` from that address only (`python -m velora.serve`, `VELORA_FORWARDED_ALLOW_IPS`; `*` is refused).
+  - Caddy replaces any `X-Forwarded-For` a client sends.
+  - The login rate limit is therefore per real client: not global, and not something a client can dodge. The CI rehearsal shows that 11 attempts with 11 spoofed addresses are limited after 10.
+  - uvicorn's own log lines now go through the redacting JSON formatter (P5 finding).
+- **Secrets:** settings files in `/etc/velora`, one per container, root-only (0600, directory 0700). The plan allows "a secret store or env files with restricted permissions"; this is the env-file option.
+  - `velora env-init` writes them with a fresh random password for every database role and the administrator.
+  - `velora db provision` sets each role's password from those files. There is one source of truth, and no hand-typed `\password`.
+  - `velora env-check` runs before every release. It checks:
+    - permissions and ownership;
+    - required values;
+    - each service's own settings validation;
+    - the same password for a role in every file;
+    - https.
+  - *Trade-off:* the values are environment variables inside the containers, visible to `docker inspect`, so to root on the server. Root can read the files anyway on a one-person server.
+  - *Alternative:* an external secret store. Rejected for now: it costs money or adds a service, for one administrator.
+- **PostgreSQL in a container** on the same VM (AD-35):
+  - its data is in a Docker volume;
+  - it's never published;
+  - passwords use scram-sha-256;
+  - default tuning for now; V-03 sets the VM's size.
+- **Releases are built on the server**, from `git archive` of the exact commit, and tagged with the commit's first 12 characters.
+  - There is no image registry: nothing to pay for, and no registry credentials on the server.
+  - *Trade-off:* a build takes a few minutes on a free VM.
+- **`velora release REF`:**
+  - builds the image;
+  - checks the settings;
+  - **backs up first**, and stops if that fails;
+  - provisions and migrates;
+  - switches every container (`docker compose up --wait`);
+  - waits until `/readyz` answers through Caddy with a trusted certificate and HSTS;
+  - records the release in `/etc/velora/release.env` and `releases.log`.
+- **`velora rollback`** switches the images and compose files back to the previous release. It **never reverts migrations** (fix forward):
+  - the release checklist therefore requires each release's migrations to work with the previous release's code: add first, remove a release later;
+  - when that can't hold, the way back is a restore (R4);
+  - running `rollback` again rolls forward.
+- **Docker is the supervisor** (`restart: unless-stopped`). A crashed worker, or one whose recovery failed, is restarted, and recovery mode runs again (the P11 finding). The CI rehearsal kills the worker with SIGKILL and checks both.
+- **Hourly backups** run from a systemd timer (`velora-backup.timer`, persistent across reboots). `env-init` sets `VELORA_MONITOR_EXPECT_BACKUPS=true`.
+- **Restores read the secret key on standard input** (`--secret-key -`, a new option on `python -m velora.backup restore`), so it's never copied into a container or a volume.
+- **The host** (`infra/host/install.sh`, Ubuntu 24.04):
+  - **SSH:** keys only, no root login, only the admin user.
+  - **Firewall:** ufw, with 443 from anywhere and 22 from listed addresses. The script refuses to run if the current SSH session would be locked out.
+  - **Cloud-image rules:** some images (Oracle's) ship their own iptables rules; the script removes them, so ufw decides.
+  - **Updates:** automatic security updates. When one needs a reboot, it happens at 00:00 UTC (05:00 PKT), and the worker's recovery mode covers it.
+  - **Docker** comes from Ubuntu's own packages, so the security updates cover it too. It gets log rotation, `live-restore`, and 2 GB of swap on small machines.
+  - **Docker publishes ports past ufw.** That's why the compose test allows exactly one published port, and why the external scan (T1) is the proof.
+- **The external port scan** (`python -m velora.deploy scan`) is a TCP connect scan in the standard library, run from the founder's computer.
+  - It fails on any open port other than the expected ones, and on an expected port that is closed.
+  - UDP isn't scanned: nothing listens on it, and `nmap -sU` can confirm that.
+- **Staging:**
+  - a separate stack with `VELORA_ENV=staging`, its own hostname, settings and data;
+  - in staging, `python -m velora.admin tenant-create` refuses a slug without `test-`, so merchant data can't be onboarded there by mistake;
+  - a production backup is never restored into staging;
+  - **zero-cost proposal:** if the free tier gives one usable VM, staging runs on it first. Once the drills pass, it is rebuilt as production (new settings and volumes), and later rehearsals happen in CI.
+- **The CI rehearsal** ("Deployment rehearsal" job, `infra/tests/stack-drill.sh`) runs the real compose stack through the same `velora` tool on every push:
+  - a first release from nothing;
+  - only 443 published, and a scan of the stack's ports;
+  - the TLS chain verifies, with HSTS and CSP sent;
+  - settings are owner-only, and `env-check` refuses a readable one;
+  - no database password appears in any container log;
+  - the rate limit holds through the proxy, and the staging guard works;
+  - the worker-crash drill;
+  - the API-down drill: the alert reaches an HTTPS webhook stand-in, then clears;
+  - a backup, a verified restore, and the R4 swap into service;
+  - a second release, a rollback, and a roll forward.
+
+  The record goes into the run's summary. **It is a rehearsal, not staging:** a private certificate authority, a stand-in for the founder's webhook, no WhatsApp, one CI machine.
+- **New runtime dependency:** `uvicorn` moves from the development tools to the runtime (the production server).
+- **Findings for later phases:**
+  - **P5-T2 (after the Go):**
+    - set `VELORA_OPENWA_IMAGE` to the exact validated version;
+    - lock its container down like the others (read-only, capabilities) once its needs are known (PC-4);
+    - restrict its outbound network to what WhatsApp needs, if possible;
+    - add the two OpenWA drills to the CI rehearsal, with a stand-in if one exists.
+  - **P10 (optional):** a worker-heartbeat alert (the AD-36 finding still stands).
+  - **P13:**
+    - data retention (still open);
+    - the usability check;
+    - the staging end-to-end run.
+  - **Once the hostname is chosen (B12):** keep it. The dashboard is an installed app (PWA) tied to its origin, and HSTS is cached for a year.
+- **Evidence:** see "P12 task evidence" in the status tracker. Files are in `infra/`; tests are in `backend/tests/deploy/` and `backend/tests/db/test_provision.py`; the guide is [`../operations/deployment.md`](../operations/deployment.md).
+
 ---
 
 ## 3. VALIDATION-DEPENDENT decisions (decided only after the OpenWA trial)
@@ -932,7 +1047,7 @@ A few GB of dumps is probably **$0** on R2 or B2, depending on how long dumps ar
 
 ## 8. Items for owner review
 
-1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-34, AD-36).** They stand unless you reverse them.
+1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-34, AD-36, AD-37).** They stand unless you reverse them.
    - ~~**AD-30 needs a decision:** may Groq's free tier receive real customer messages?~~ **Decided by AD-35:** yes (zero cost). Switching on Zero Data Retention in Groq's Data Controls is recommended.
    - **AD-31 asks you to confirm:** opted-out customers get no order status messages; a customer can cancel only before acceptance and before a verified payment.
    - **AD-32 asks you to confirm:** the reconciliation report and payment reversal are owner-only (managers can't); a duplicate reference is refused rather than allowed with a warning; the COD first-order limit applies until a customer has a *completed* order; staff confirm the full order total (no partial payments).
@@ -943,6 +1058,13 @@ A few GB of dumps is probably **$0** on R2 or B2, depending on how long dumps ar
      - role passwords are set again after a restore;
      - every restart, even a short one, asks customers with an open summary to confirm again;
      - one worker at a time.
+   - **AD-37 asks you to confirm:**
+     - port 80 stays closed, so `http://` addresses don't redirect;
+     - the dashboard is served by the API container, not a separate web container;
+     - releases are built on the server (no image registry);
+     - a rollback never reverts migrations, so each release's migrations must work with the previous code;
+     - automatic security updates may reboot the server at 05:00 PKT;
+     - if the free tier gives one usable VM, staging runs there first and is then rebuilt as production.
 2. **The optional customer order-tracking link (§5).** Not approved.
 3. **The validation-dependent decisions V-01 to V-10.** These come back to you with the trial evidence.
 4. **The cost commitment.** Approve only after vendor checks and V-03.
