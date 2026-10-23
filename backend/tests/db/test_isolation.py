@@ -55,6 +55,8 @@ TENANT_TABLES: dict[str, str] = {
     # P10: handoffs (daily pilot metrics) and refused webhooks.
     "handoff_events": "tenant_id",
     "ingress_rejections": "tenant_id",
+    # P11: recovery mode's record of each outage, per tenant.
+    "recovery_runs": "tenant_id",
 }
 
 # Tables in the velora schema that are deliberately global (no tenant). Each needs a reason.
@@ -66,6 +68,9 @@ GLOBAL_TABLES: dict[str, str] = {
     # monitor role reads and appends them, and the runtime can't see them.
     "backup_runs": "backup job reports",
     "alert_events": "alerts sent to the founder",
+    # P11: the worker's last sign of life, so recovery mode knows when an outage began. A
+    # name and two timestamps; no tenant data.
+    "worker_heartbeats": "worker heartbeat for recovery mode",
 }
 
 # Policies other than tenant_isolation: (table, policy) -> (roles, command).

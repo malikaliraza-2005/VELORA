@@ -59,6 +59,7 @@ class OrderOut(BaseModel):
     customer_phone: str | None
     created_at: datetime
     updated_at: datetime
+    placed_during_recovery: bool
     next_statuses: list[str]
     lines: list[OrderLineOut]
     history: list[OrderMoveOut]

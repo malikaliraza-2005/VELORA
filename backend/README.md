@@ -143,3 +143,31 @@ python -m velora.monitoring daily --day 2026-10-21   # pilot metrics per restaur
 python -m velora.monitoring record-backup --ok --kind hourly-dump   # for the P11 backup job
 python -m velora.monitoring test-alert     # check that alerts reach you
 ```
+
+## Backups and recovery mode (P11)
+
+- **Recovery mode** (`src/velora/workers/recovery.py`) runs on every start of `python -m velora.workers`, before any work, holding a lock so only one worker runs. It checks the database, then for each tenant, in one transaction:
+  - takes back leases;
+  - (V-04, not built) reconciles inbound messages;
+  - voids YES confirmations from before the outage and asks those customers to confirm again;
+  - extends open transfer windows by the outage's length;
+  - marks in-flight sends `unknown`;
+  - replaces stale replies.
+
+  The outage starts at the worker's last heartbeat (`worker_heartbeats`, every 15 s). Each recovery is recorded in `recovery_runs`. The dashboard flags orders placed before the held messages were all processed (`placed_during_recovery`).
+- **Backups** (`src/velora/backup/`) are made by the `velora_backup` role (BYPASSRLS, `pg_read_all_data`, writes nothing):
+  - each one is three files under a timestamp: roles, the database dump, and a manifest;
+  - all three are encrypted to a public key (X25519 + AES-256-GCM, `crypto.py`), so the server never holds the key that reads them;
+  - nothing in plaintext touches the disk;
+  - they go to a directory or any S3-compatible bucket (`storage.py`, SigV4 with the standard library);
+  - OpenWA's session volume is never included.
+- **A restore** goes into a new database and verifies it against the manifest: row counts, FORCE RLS and policies, roles, database grants, and tenant isolation as `app_rw`.
+
+```bash
+python -m velora.backup keygen --public-out backup.pub --secret-out backup.key   # on YOUR computer
+python -m velora.backup run       # one backup now; reports to the monitor (hourly timer: P12)
+python -m velora.backup list
+python -m velora.backup restore --secret-key backup.key --target-db velora_restored
+```
+
+The full procedures are in [`../docs/operations/runbooks.md`](../docs/operations/runbooks.md).

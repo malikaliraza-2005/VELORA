@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Literal
@@ -160,6 +160,50 @@ async def enqueue(
     return message_id
 
 
+async def replace_stale(
+    conn: AsyncConnection[Any],
+    tenant: TenantId,
+    channel_id: uuid.UUID,
+    now: datetime,
+    *,
+    already_told: Collection[str] = (),
+) -> tuple[int, list[uuid.UUID]]:
+    """Drop the channel's conversational replies past their staleness window, and queue one
+    "we're back" message per affected recipient, except those in `already_told` (recovery
+    has just sent them its own apology). Returns (dropped, replacement ids)."""
+    cur = await conn.execute(
+        "UPDATE velora.outbox_messages SET status = 'stale', "
+        "last_error = 'not sent within the staleness window' "
+        "WHERE channel_id = %s AND status IN ('pending', 'waiting_for_channel') "
+        "AND purpose = 'conversational' AND stale_after <= %s "
+        "RETURNING id, ordering_key, seq",
+        (channel_id, now),
+    )
+    dropped = 0
+    first_stale: dict[str, tuple[int, uuid.UUID]] = {}
+    for message_id, recipient, seq in await cur.fetchall():
+        dropped += 1
+        if (
+            recipient is not None
+            and recipient not in already_told
+            and (recipient not in first_stale or seq < first_stale[recipient][0])
+        ):
+            first_stale[recipient] = (seq, message_id)
+    replacements = [
+        await enqueue(
+            conn,
+            tenant,
+            channel_id=channel_id,
+            message=OutboundText(recipient, WE_ARE_BACK_TEXT),
+            idempotency_key=f"we-are-back:{message_id}",
+            purpose="conversational",
+            at=now,
+        )
+        for recipient, (_, message_id) in first_stale.items()
+    ]
+    return dropped, replacements
+
+
 # Receipts may only move a message forward.
 _RECEIPT_FROM: dict[str, tuple[str, ...]] = {
     "sent": ("unknown",),
@@ -258,7 +302,9 @@ class OutboxSender:
                 )
                 report.held += cur.rowcount
                 return 0
-            await self._replace_stale(conn, tenant, channel, now, report)
+            stale, replacements = await replace_stale(conn, tenant, channel.id, now)
+            report.stale += stale
+            report.replacements.extend(replacements)
             cur = await conn.execute(
                 "UPDATE velora.outbox_messages SET status = 'pending', next_attempt_at = %s "
                 "WHERE channel_id = %s AND status = 'waiting_for_channel'",
@@ -272,41 +318,6 @@ class OutboxSender:
             )
             (recent,) = expect_row(await cur.fetchone())
         return max(0, self._cap.count - int(recent))
-
-    async def _replace_stale(
-        self,
-        conn: AsyncConnection[Any],
-        tenant: TenantId,
-        channel: channels.Channel,
-        now: datetime,
-        report: SendReport,
-    ) -> None:
-        cur = await conn.execute(
-            "UPDATE velora.outbox_messages SET status = 'stale', "
-            "last_error = 'not sent within the staleness window' "
-            "WHERE channel_id = %s AND status IN ('pending', 'waiting_for_channel') "
-            "AND purpose = 'conversational' AND stale_after <= %s "
-            "RETURNING id, ordering_key, seq",
-            (channel.id, now),
-        )
-        first_stale: dict[str, tuple[int, uuid.UUID]] = {}
-        for message_id, recipient, seq in await cur.fetchall():
-            report.stale += 1
-            if recipient is not None and (
-                recipient not in first_stale or seq < first_stale[recipient][0]
-            ):
-                first_stale[recipient] = (seq, message_id)
-        for recipient, (_, message_id) in first_stale.items():
-            replacement = await enqueue(
-                conn,
-                tenant,
-                channel_id=channel.id,
-                message=OutboundText(recipient, WE_ARE_BACK_TEXT),
-                idempotency_key=f"we-are-back:{message_id}",
-                purpose="conversational",
-                at=now,
-            )
-            report.replacements.append(replacement)
 
     async def _claim(self, tenant: TenantId, channel: channels.Channel) -> _Claimed | None:
         now = self._clock.now()

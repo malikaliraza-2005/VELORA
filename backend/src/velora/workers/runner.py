@@ -3,6 +3,9 @@
 Each round asks the dispatcher which tenants have work, then works on each inside its own
 tenant scope. One tenant's failure is logged (redacted) and doesn't stop the others. Each
 round has its own correlation id, and log lines name the tenant being worked on (P10-T1).
+
+After recovery mode (P11), the `RecoveryTracker` records the heartbeat each round and closes
+each tenant's recovery window once its held messages have been processed.
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ from velora.messaging.inbox import InboxProcessor
 from velora.messaging.outbox import OutboxSender
 from velora.orders.timers import OrderTimers
 from velora.redaction import error_text
+from velora.workers.recovery import RecoveryTracker
 
 log = logging.getLogger(__name__)
 
@@ -37,12 +41,14 @@ class Worker:
         *,
         health_interval: timedelta = HEALTH_POLL_INTERVAL,
         timers: OrderTimers | None = None,
+        recovery: RecoveryTracker | None = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._inbox = inbox
         self._outbox = outbox
         self._monitor = monitor
         self._timers = timers
+        self._recovery = recovery
         self._clock = clock
         self._health_interval = health_interval
         self._last_poll: datetime | None = None
@@ -52,6 +58,11 @@ class Worker:
             await self._round()
 
     async def _round(self) -> None:
+        if self._recovery is not None:
+            try:
+                await self._recovery.beat()
+            except Exception as exc:
+                log.error("heartbeat failed: %s", error_text(exc))
         now = self._clock.now()
         if self._last_poll is None or now - self._last_poll >= self._health_interval:
             self._last_poll = now
@@ -65,6 +76,8 @@ class Worker:
             try:
                 with log_context(tenant=tenant):
                     await self._inbox.run_once(tenant)
+                    if self._recovery is not None:
+                        await self._recovery.inbox_processed(tenant)
                     if self._timers is not None:
                         # Before the outbox, so an expiry notice goes out in the same round.
                         await self._timers.run_once(tenant)
@@ -80,3 +93,9 @@ class Worker:
                 log.error("worker round failed: %s", error_text(exc))
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), ROUND_INTERVAL.total_seconds())
+        if self._recovery is not None:
+            # A clean stop: the next start's outage begins now.
+            try:
+                await self._recovery.beat(force=True)
+            except Exception as exc:
+                log.error("final heartbeat failed: %s", error_text(exc))

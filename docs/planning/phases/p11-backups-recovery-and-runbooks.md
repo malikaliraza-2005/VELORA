@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Authorisation** | **NOT AUTHORISED.** **BLOCKED** until its WhatsApp-dependent prerequisites (P5, P7) are complete. |
+| **Authorisation** | **Authorised 2026-10-23** ("Start P11"), for what works without the OpenWA Go (AD-36). Inbound reconciliation (recovery step 3) waits for V-04; the 24-hour backup run, the staging drills and the runbook walk-throughs wait for P12. |
 | **Depends on** | P2, P5 (recovery mode), P7. V-07 for session backups. |
 | **Blocks** | P12 |
 | **Effort (estimate)** | 4–5 days |
@@ -19,6 +19,7 @@
 | V-07: session backup policy | VALIDATION-DEPENDENT |
 | PC-8: don't back up the OpenWA volume off-site | PROPOSED, awaiting review |
 | PC-13: add #560 and #830 as pilot risks | PROPOSED, awaiting review |
+| AD-36: P11 implementation choices | ADOPTED (delegated) |
 
 ## Objective and scope
 - **Objective:** recover safely from data loss and outages.
