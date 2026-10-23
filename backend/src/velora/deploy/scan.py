@@ -81,6 +81,6 @@ async def scan(
     return ScanResult(
         host=host,
         scanned=len(targets),
-        open=tuple(p for p, is_open in zip(targets, results, strict=True) if is_open),
+        open=tuple(sorted(p for p, is_open in zip(targets, results, strict=True) if is_open)),
         expected=tuple(sorted(set(expected))),
     )
