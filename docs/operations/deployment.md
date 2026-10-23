@@ -115,7 +115,7 @@ Stop the timer.
 
 | Date | Step 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | Total | Who | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| — | | | | | | | | | | | | **Not run yet: no VM (B5, V-03).** The CI rehearsal does steps 4–7 from nothing in about 2 minutes. |
+| — | | | | | | | | | | | | **Not run yet: no VM (B5, V-03).** The CI rehearsal does steps 4–7 from nothing in under a minute (41 s, CI run 39940522360). |
 
 ## Releasing a new version
 
