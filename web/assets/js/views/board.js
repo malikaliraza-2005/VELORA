@@ -89,6 +89,7 @@ export default {
           h("span", { class: "when", title: order.created_at }, ago(order.created_at))),
         h("div", { class: "status-line" }, STATUS_LABELS[order.status] || order.status),
         order.possible_duplicate ? h("div", { class: "flag" }, "⚠ Possible duplicate — check with the customer before making it") : null,
+        order.placed_during_recovery ? h("div", { class: "flag recovery" }, "⚠ Placed after a system outage — confirm the order with the customer") : null,
         h("div", { class: "meta" },
           order.fulfilment === "delivery" ? "Delivery" : "Pickup",
           order.pickup_at ? ` at ${time(order.pickup_at)}` : "",
@@ -125,7 +126,7 @@ export default {
       }
       seen = new Set([...(seen || []), ...fresh]);
 
-      const snapshot = JSON.stringify(all.map((o) => [o.id, o.status, o.updated_at, o.possible_duplicate]));
+      const snapshot = JSON.stringify(all.map((o) => [o.id, o.status, o.updated_at, o.possible_duplicate, o.placed_during_recovery]));
       if (snapshot === last) return;
       last = snapshot;
       const keep = new Set();

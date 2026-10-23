@@ -1,6 +1,6 @@
 # VELORA implementation status
 
-- **Last updated:** 2026-10-22
+- **Last updated:** 2026-10-23
 - **Plan:** [`implementation-plan.md`](implementation-plan.md) (master roadmap); detailed tasks per phase in [`phases/`](phases/)
 - **Decisions:** [`../architecture/architecture-decisions.md`](../architecture/architecture-decisions.md)
 
@@ -22,10 +22,11 @@
 | **P8** | **Provider-neutral part built (2026-10-21).** Authorised by the owner ("Start P8"). Built under AD-25 against the `FakeProvider`. Choices recorded in AD-32. Each restaurant must enter its account details before transfer is offered. See "P8 task evidence". |
 | **P9** | **Provider-neutral part built (2026-10-22).** Authorised by the owner ("Start P9"). Built under AD-25 against the `FakeProvider`. Choices recorded in AD-33. The staging end-to-end run with a test number and the usability check with kitchen staff (P9-T8) wait for the Go, P12 and P13. See "P9 task evidence". |
 | **P10** | **Provider-neutral part built (2026-10-22).** Authorised by the owner ("Start P10"), read as the provider-neutral part before the Go, like P5–P9 (to be confirmed, AD-34). Built against the `FakeProvider`. Structured logs, the monitor role and metrics, alerts with the four drills, and the founder's status and daily metrics. Alerts will use free services (AD-35: zero cost); real delivery to the founder is verified once they are set up. See "P10 task evidence". |
-| **P11–P13** | **Not started. Not authorised.** |
+| **P11** | **Built (2026-10-23), except what needs the Go or staging.** Authorised by the owner ("Start P11"). Encrypted backups by a dedicated backup role, restore with verification, and recovery mode on every worker start, with all nine steps (inbound reconciliation is a hook until V-04). The restore drill and the recovery drill pass in CI; the runbooks are written. The 24-hour backup run, the staging drills and the runbook walk-throughs wait for P12. Choices in AD-36. See "P11 task evidence". |
+| **P12–P13** | **Not started. Not authorised.** |
 | **Provider-neutral track (AD-25)** | Owner decision 2026-10-21: the provider-neutral parts of P5, and P6–P9, may be built against the `FakeProvider` before the OpenWA Go, each once it is authorised. |
-| **OpenWA adapter, real WhatsApp traffic, P11–P13** | **Blocked** until the live validation is complete and the owner gives a Go (V-01). |
-| **Application code** | P1 skeleton, the P2 database layer, P3 staff identity (login, sessions, roles, PINs, audit, founder onboarding tool), P4 menu and ordering controls (versioned catalogue, CSV import, publish and rollback, availability, pause, capacity, settings, server-side pricing), and the P5 provider-neutral messaging core (provider interface, FakeProvider, durable inbox and outbox, channel state machine, circuit breaker, global pause, worker loop, log redaction). P6 conversations (engine, commands, numbered menus, AI proposals via Groq, cart, checkout, templated summary, handoff). P7 order lifecycle (YES nonce, order transaction, transition table, timers, status messages, recovery hook, staff order API). P8 payment verification (append-only ledger, reference + PIN verification, duplicate references, late-payment review, owner reconciliation and reversal, COD blocklist, transfer details, customer evidence). P9 staff dashboard (installable PWA in `web/`: order board, payments, chats, menu availability, controls, today summary, WhatsApp status and QR re-link, staff, settings; idempotency keys on every action; CSP with Trusted Types; browser tests). P10 monitoring (JSON logs with tenant and correlation ids, `/readyz`, the `velora_monitor` role, metrics, alert rules with email and webhook delivery, heartbeat, founder status and daily pilot metrics). No real WhatsApp connection. |
+| **OpenWA adapter, real WhatsApp traffic, P12–P13** | **Blocked** until the live validation is complete and the owner gives a Go (V-01). |
+| **Application code** | P1 skeleton, the P2 database layer, P3 staff identity (login, sessions, roles, PINs, audit, founder onboarding tool), P4 menu and ordering controls (versioned catalogue, CSV import, publish and rollback, availability, pause, capacity, settings, server-side pricing), and the P5 provider-neutral messaging core (provider interface, FakeProvider, durable inbox and outbox, channel state machine, circuit breaker, global pause, worker loop, log redaction). P6 conversations (engine, commands, numbered menus, AI proposals via Groq, cart, checkout, templated summary, handoff). P7 order lifecycle (YES nonce, order transaction, transition table, timers, status messages, recovery hook, staff order API). P8 payment verification (append-only ledger, reference + PIN verification, duplicate references, late-payment review, owner reconciliation and reversal, COD blocklist, transfer details, customer evidence). P9 staff dashboard (installable PWA in `web/`: order board, payments, chats, menu availability, controls, today summary, WhatsApp status and QR re-link, staff, settings; idempotency keys on every action; CSP with Trusted Types; browser tests). P10 monitoring (JSON logs with tenant and correlation ids, `/readyz`, the `velora_monitor` role, metrics, alert rules with email and webhook delivery, heartbeat, founder status and daily pilot metrics). P11 backups and recovery (the `velora_backup` role, backups encrypted for the founder alone, stored in a directory or an S3-compatible bucket, restore with verification, recovery mode on startup, the "placed after an outage" flag, runbooks). No real WhatsApp connection. |
 | **Purchases / subscriptions** | None. |
 
 **What the owner can provide right now:**
@@ -55,7 +56,7 @@ A reduced live-trial variant that fits these constraints is **proposed, not appr
 | [P8 Payment verification](phases/p08-payment-verification.md) | **Provider-neutral part built** (2026-10-21) | Real-WhatsApp exit tests: Go (V-01). Evidence media for staff: P5-T2 | PR #10; CI run 39641355254 (761 tests). See "P8 task evidence" | Owner: review AD-32 |
 | [P9 Staff dashboard](phases/p09-staff-dashboard.md) | **Provider-neutral part built** (2026-10-22) | Staging E2E with a test number: Go (V-01) and P12. Usability check: P13 | PR #12; CI run 39775329133 (810 tests). See "P9 task evidence" | Owner: review AD-33 |
 | [P10 Monitoring](phases/p10-monitoring-and-alerting.md) | **Provider-neutral part built** (2026-10-22) | Real alert delivery: free mailbox and heartbeat set up (AD-35). Daily metrics in staging: P12. HMAC-failure alert from real webhooks: P5-T3 | PR #15; CI run 39808148631 (929 tests). See "P10 task evidence" | Owner: review AD-34 |
-| [P11 Backups and recovery](phases/p11-backups-recovery-and-runbooks.md) | Not started — blocked | P2, P5, P7; V-07 | — | — |
+| [P11 Backups and recovery](phases/p11-backups-recovery-and-runbooks.md) | **Built** (2026-10-23), except the staging runs | 24-hour backup run, staging drills, runbook walk-throughs: P12. Inbound reconciliation: V-04. Storage vendor: B5 | PR PR_PENDING; CI_SHORT. See "P11 task evidence" | Owner: review AD-36; make the backup key (runbook R4) |
 | [P12 Deployment and staging](phases/p12-deployment-and-staging.md) | Not started — blocked | P10, P11; V-03 | — | — |
 | [P13 Pilot onboarding](phases/p13-pilot-onboarding.md) | Not started — blocked | P12; legal brief; consent form; tax confirmation; owner approval | — | — |
 
@@ -346,6 +347,43 @@ Only the provider-neutral part was built (see AD-34 on the scope). Implementatio
 - **P11:** the backup job reports each run with `python -m velora.monitoring record-backup`.
 - **P12:** run the monitor as its own container; set the probe URL, the heartbeat, an external `/readyz` check and the free alert mailbox (AD-35).
 
+## P11 task evidence (2026-10-23)
+
+Only what works without the OpenWA Go was built (see AD-36 on the scope). Implementation choices are recorded as **ADOPTED (delegated)** in decision AD-36, for owner review. The backup tests use a database of their own; the dump tools run as the new `velora_backup` role.
+
+| Task | Status | Evidence (tests in `backend/tests/`) |
+|---|---|---|
+| P11-T1 Database backups | Done in code; **the 24-hour staging run is gated by P12** | `backup/test_backup_restore.py`: a backup is three files (roles, database, manifest); **each is confirmed encrypted** (no dump header, role script, tenant name or phone number in the files) and nothing is left in the work directory; a failed dump leaves no complete backup; **each run is reported to the monitor** (`backup_runs`, ok and failed, without the password); the backup role reads every tenant and writes nothing. `backup/test_crypto.py`: round trips; a changed byte, a dropped chunk, reordered chunks and the wrong key are refused. `backup/test_storage.py`: the S3 signature matches AWS's published example; put, get and paged listing against a local S3 stand-in; settings |
+| P11-T2 OpenWA session backup policy | Done (the PC-8 default) | `backup/test_backup_restore.py`: **the backup's contents are exactly the database's three files**; OpenWA's session volume is never read. Policy in the runbooks (R5) |
+| P11-T3 Restore script and restore drill | Done in CI; **the staging drill is gated by P12** | `backup/test_backup_restore.py::test_restore_drill`: restored to a fresh database, **all six checks pass** (roles, schema version, every row count, FORCE RLS and policies, database grants, **tenant isolation as `app_rw` across every tenant table and tenant**); roles, grants and policies equal the original's; RTO and RPO reported (well under 4 h and 1 h); **a test order succeeds on the restored copy**. A changed file, the wrong key and an existing database are refused; an incomplete backup is never chosen; verification catches a copy without FORCE RLS, without a policy, or with rows missing |
+| P11-T4 Recovery mode on startup | Done (step 3, inbound reconciliation, waits for V-04: a hook, recorded as skipped) | `orders/test_recovery_mode.py`, **one test per step**: (1) a database that doesn't answer, or isn't migrated, stops the start; one worker at a time; a first start voids nothing; (2) an event a dead worker was processing is processed once; (3) the hook is skipped, or called with the outage; (4) **a YES on a summary from before the outage places nothing**, with one apology; (5) transfer windows open at the outage are extended by its length, and one already closed expires; (6) **a send in flight becomes unknown and is never re-sent**; (7) stale replies are replaced by one message per customer; (8) recovery sends nothing, and the flush keeps the rate cap; (9) **orders placed from the backlog are highlighted** until it clears. An interrupted recovery resumes without extending a window twice. Each step's test fails when that step is removed (checked by hand for steps 4, 5 and 6) |
+| P11-T5 Recovery-mode drill | Done in CI against the `FakeProvider`; **the staging drill is gated by P12** | `orders/test_recovery_mode.py::test_recovery_drill_after_a_one_hour_outage`: the real worker, a crash mid-send, a simulated 1-hour outage with messages arriving meanwhile, then a restart: **no duplicate orders, no stale YES accepted, every outbox message resolved** (sent, unknown or stale), every inbound message processed, the transfer window extended, the backlog order highlighted, at most 20 sends a minute |
+| P11-T6 Runbooks and manual fallback | Written; **walk-throughs gated by P12** | [`../operations/runbooks.md`](../operations/runbooks.md): R1 session down / QR, R2 engine broken for all, R3 number restricted, R4 database restore (with backup setup), R5 server lost, R6 payment dispute; the manual fallback. The walk-through table lists the two automated drills; no staging walk-through yet |
+
+**Verified in CI:** CI_PENDING
+
+**P11 exit criteria:**
+- **Restore drill:**
+  - restored to a fresh instance within 4 hours (RTO): **met in CI** (seconds, on a small database). The staging drill with realistic data is P12.
+  - data loss of 1 hour or less (RPO): **met by design** (hourly backups; each restore reports the data age). The 24-hour staging run proves the schedule (P12).
+  - roles, FORCE RLS and policies present: **met.**
+  - cross-tenant tests pass after the restore: **met** (the isolation check over every tenant table and tenant, as `app_rw`).
+  - a test order succeeds: **met** on the restored copy, against the `FakeProvider`.
+- **Recovery-mode drill** after a simulated 1-hour outage (no duplicate orders, no stale YES accepted, every outbox message resolved): **met in CI** against the `FakeProvider`. The staging run is P12.
+
+**Findings for later phases:** see AD-36. In short:
+- **P12:**
+  - an hourly timer for `python -m velora.backup run`;
+  - the bucket, with a lifecycle rule and a key that can't delete;
+  - PostgreSQL 17 client tools;
+  - the `velora_backup` password;
+  - `VELORA_MONITOR_EXPECT_BACKUPS=true`;
+  - a supervisor that restarts the worker;
+  - the staging drills and runbook walk-throughs.
+- **V-04:** the inbound reconciliation hook.
+- **P10 (optional):** a "worker heartbeat stale" alert.
+- **P13:** data retention is still to do; backups keep what the database holds.
+
 ## Resuming the live test
 
 The owner provides:
@@ -367,17 +405,17 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 | B2 | ~~Legal opinion on WhatsApp Terms-of-Service exposure and consent wording~~ **Closed:** the owner withdrew AD-08 and accepts the risk (AD-35) | — | — |
 | B3 | Tax by payment method not confirmed. No accountant (AD-35): the owner sets each restaurant's rate from public sources | Correct totals (P4, P13) | Founder |
 | B4 | Merchant acceptance of a separate number and kitchen device not confirmed | P13 | Founder (interviews) |
-| B5 | Free-tier terms not verified (Oracle Always Free: region, capacity, commercial use, idle reclamation; free backup storage; free heartbeat/uptime; Groq free limits). Zero cost (AD-35) | Hosting (P12), backups (P11) | Engineering |
+| B5 | Free-tier terms not verified (Oracle Always Free: region, capacity, commercial use, idle reclamation; free backup storage, B2 or R2, both supported by the P11 code; free heartbeat/uptime; Groq free limits). Zero cost (AD-35) | Hosting (P12), backups in staging (P11-T1) | Engineering |
 | B6 | AI model not selected (no real dataset). Groq gpt-oss-20b is the built adapter (AD-30), but the selection needs the P0-F6 evaluation | Pilot use of AI | Engineering |
 | B7 | ~~Delivery channel for staff magic links undecided~~ **Resolved for the pilot:** manual delivery (AD-27, ADOPTED (delegated)). Email is a later option | — | Engineering |
-| B8 | Owner authorisation for P11–P13 (P1 to P8 authorised 2026-10-21, P9 and P10 on 2026-10-22; P5 to P10 for their provider-neutral parts only) | P11 onwards | Owner |
+| B8 | Owner authorisation for P12–P13 (P1 to P8 authorised 2026-10-21, P9 and P10 on 2026-10-22, P11 on 2026-10-23; P5 to P11 for the parts that work without the Go) | P12 onwards | Owner |
 | B11 | Free alert mailbox and heartbeat not yet set up (AD-35; PC-11 rejected) | Real alert delivery to the founder (P10-T3 in staging) | Founder + engineering (P12) |
 | B10 | ~~Groq's free tier vs AD-04~~ **Decided:** Groq's free tier is used (AD-35, owner accepts unverified training terms) | — | — |
 | B9 | Reduced trial variant and trial tooling (P0-E1) not approved | Resuming the live test | Owner |
 
 ## Decisions awaiting the owner
 
-- Review the **ADOPTED (delegated)** decisions AD-11 to AD-24 and AD-26 to AD-34 ([decisions §8](../architecture/architecture-decisions.md#8-items-for-owner-review)).
+- Review the **ADOPTED (delegated)** decisions AD-11 to AD-24, AD-26 to AD-34 and AD-36 ([decisions §8](../architecture/architecture-decisions.md#8-items-for-owner-review)).
 - Approve or reject the **reduced live-trial variant** ([validation plan §9](openwa-validation-plan.md)).
 - **Go/No-Go and V-01 to V-10:** after the live trial.
 - **Infrastructure cost:** $0 a month by owner decision (AD-35); only free-tier terms remain to verify (B5).
@@ -388,6 +426,7 @@ After that, follow the beginner setup guide in the validation plan's appendix.
 
 | Date | Change |
 |---|---|
+| 2026-10-23 | Owner authorised **P11** ("Start P11"). Built: the `velora_backup` role and migration 0013, encrypted backups (roles, database and a manifest from one snapshot) to a directory or an S3-compatible bucket, restore into a new database with six checks, recovery mode with all nine steps on every worker start (inbound reconciliation a hook until V-04), the dashboard's "placed after an outage" flag, and the runbooks in `docs/operations/` (PR PR_PENDING, CI_SHORT). New dependency: `cryptography`. Decision AD-36 recorded as ADOPTED (delegated). |
 | 2026-10-22 | Owner decision **AD-35: zero cost.** A free VM with PostgreSQL on it and our own off-site backups (amends AD-04); Groq's free tier for the AI (settles B10); free monitoring (PC-11 rejected); **AD-08 withdrawn**: no lawyer or accountant, risks accepted (B2 closed; the owner sets tax rates, B3). |
 | 2026-10-22 | Owner authorised **P10** ("Start P10"). Built the provider-neutral part: JSON logs with tenant and correlation ids (cookies now redacted too), `/readyz`, the `velora_monitor` role and migration 0012, metrics, alert rules with email and webhook delivery and a heartbeat, the four drills, and the founder's `status` and `daily` commands (PR #15, CI run 39808148631; 929 tests). Decision AD-34 recorded as ADOPTED (delegated). No alert vendor chosen (B11). |
 | 2026-10-22 | Added a local testing tool (`python -m velora.dev`: demo restaurant, dashboard, simulated WhatsApp customer) and the guide [`local-testing-guide.md`](local-testing-guide.md). The Menu screen gained draft review, CSV import, publishing and rollback, which a fresh restaurant needs before it can take orders. Checked by hand end to end on a fresh install: order on simulated WhatsApp → dashboard → accept → the customer's status messages. |

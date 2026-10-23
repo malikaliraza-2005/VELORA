@@ -54,3 +54,11 @@ class Dispatcher:
             )
             rows = await cur.fetchall()
         return sorted((TenantId(r[0]) for r in rows), key=lambda t: t.value)
+
+    async def tenants_for_recovery(self) -> list[TenantId]:
+        """Every tenant that has ever had a channel, retired or not: only they can hold
+        messages, confirmations or transfer windows for recovery mode (P11)."""
+        async with self._pool.connection() as conn, conn.transaction():
+            cur = await conn.execute("SELECT DISTINCT tenant_id FROM velora.channels")
+            rows = await cur.fetchall()
+        return sorted((TenantId(r[0]) for r in rows), key=lambda t: t.value)

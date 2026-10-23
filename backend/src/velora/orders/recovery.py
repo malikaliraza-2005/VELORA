@@ -6,12 +6,16 @@ voids every open nonce created before `outage_started_at`. Each customer whose s
 still valid when the outage began is asked to review the cart and confirm again (A13). A later
 YES on the old summary is refused (`nonce`), and the customer gets a new summary.
 
-P11 runs this from its recovery mode on startup; the rest of that mode is P11's.
+P11's recovery mode (`velora.workers.recovery`) runs `void_pre_outage` inside its own
+transaction for each tenant.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
+
+from psycopg import AsyncConnection
 
 from velora.conversation import copy
 from velora.db import Database, TenantId
@@ -23,22 +27,29 @@ async def expire_pre_outage(
 ) -> int:
     """Void the tenant's open nonces created before the outage. Returns how many."""
     async with db.tenant(tenant) as conn:
-        cur = await conn.execute(
-            "UPDATE velora.pending_actions SET voided_at = %s, void_reason = 'recovery' "
-            "WHERE consumed_at IS NULL AND voided_at IS NULL AND created_at < %s "
-            "RETURNING id, conversation_id, expires_at",
-            (now, outage_started_at),
+        return await void_pre_outage(conn, tenant, outage_started_at=outage_started_at, now=now)
+
+
+async def void_pre_outage(
+    conn: AsyncConnection[Any], tenant: TenantId, *, outage_started_at: datetime, now: datetime
+) -> int:
+    """`expire_pre_outage` inside the caller's transaction."""
+    cur = await conn.execute(
+        "UPDATE velora.pending_actions SET voided_at = %s, void_reason = 'recovery' "
+        "WHERE consumed_at IS NULL AND voided_at IS NULL AND created_at < %s "
+        "RETURNING id, conversation_id, expires_at",
+        (now, outage_started_at),
+    )
+    voided = await cur.fetchall()
+    for action_id, conversation_id, expires_at in voided:
+        if expires_at <= outage_started_at:
+            continue  # it had expired already; the customer was waiting for nothing
+        await send_to_customer(
+            conn,
+            tenant,
+            conversation_id,
+            copy.RECONFIRM_AFTER_OUTAGE,
+            key=f"recovery-reconfirm:{action_id}",
+            now=now,
         )
-        voided = await cur.fetchall()
-        for action_id, conversation_id, expires_at in voided:
-            if expires_at <= outage_started_at:
-                continue  # it had expired already; the customer was waiting for nothing
-            await send_to_customer(
-                conn,
-                tenant,
-                conversation_id,
-                copy.RECONFIRM_AFTER_OUTAGE,
-                key=f"recovery-reconfirm:{action_id}",
-                now=now,
-            )
     return len(voided)

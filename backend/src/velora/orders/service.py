@@ -77,6 +77,7 @@ class OrderView:
     customer_phone: str | None
     created_at: datetime
     updated_at: datetime
+    placed_during_recovery: bool
     # What this staff member may move it to next.
     next_statuses: list[str]
     lines: list[OrderLine]
@@ -87,7 +88,12 @@ _COLUMNS = (
     "o.id, o.order_number, t.order_number_prefix, o.status, o.fulfilment, o.payment_method, "
     "o.subtotal_paisa, o.delivery_fee_paisa, o.tax_paisa, o.total_paisa, o.delivery_address, "
     "o.delivery_note, o.pickup_at, o.payment_due_at, o.possible_duplicate, cu.phone_e164, "
-    "o.created_at, o.updated_at"
+    "o.created_at, o.updated_at, "
+    # P11 step 9: placed after a restart, before the messages held through the outage were
+    # all processed. Staff check these with the customer.
+    "EXISTS (SELECT 1 FROM velora.recovery_runs r WHERE r.tenant_id = o.tenant_id "
+    "AND o.created_at >= r.started_at "
+    "AND (r.backlog_cleared_at IS NULL OR o.created_at <= r.backlog_cleared_at))"
 )
 _FROM = (
     "FROM velora.orders o JOIN velora.tenants t ON t.id = o.tenant_id "
@@ -120,6 +126,7 @@ def _view(row: tuple[Any, ...], lines: list[OrderLine], history: list[OrderMove]
         phone,
         created_at,
         updated_at,
+        during_recovery,
     ) = row
     allowed: list[str] = [
         s
@@ -146,6 +153,7 @@ def _view(row: tuple[Any, ...], lines: list[OrderLine], history: list[OrderMove]
         customer_phone=phone,
         created_at=created_at,
         updated_at=updated_at,
+        placed_during_recovery=during_recovery,
         next_statuses=allowed,
         lines=lines,
         history=history,

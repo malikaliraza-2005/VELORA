@@ -239,6 +239,16 @@ def seed_tenant(conn: psycopg.Connection[Any], slug: str, prefix: str) -> dict[s
             "VALUES (%s, %s, 'signature', %s) RETURNING id",
             (t, ch, now),
         )
+        # P11: one past recovery, its window already closed (so no order is highlighted).
+        ids["recovery_runs"] = _one(
+            conn,
+            "INSERT INTO velora.recovery_runs (tenant_id, outage_started_at, started_at, "
+            "leases_reclaimed, inbound, inbound_recovered, nonces_voided, windows_extended, "
+            "messages_unknown, replies_stale, backlog_cleared_at) "
+            "VALUES (%s, '2026-01-01T00:00:00Z', %s, 0, 'skipped', 0, 0, 0, 0, 0, %s) "
+            "RETURNING id",
+            (t, now, now),
+        )
     return ids
 
 

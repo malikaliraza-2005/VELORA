@@ -47,6 +47,8 @@ class Env:
     dispatcher: Dispatcher
     clock: FakeClock
     fake: FakeProvider
+    # The app_rw pool behind `db`, for the worker's global records (P11 heartbeat).
+    pool: Any = None
 
     @property
     def providers(self) -> dict[str, FakeProvider]:
@@ -101,6 +103,9 @@ class ScopedDispatcher(Dispatcher):
     async def tenants_with_channels(self) -> list[TenantId]:
         return [t for t in await self._inner.tenants_with_channels() if t in self._allowed]
 
+    async def tenants_for_recovery(self) -> list[TenantId]:
+        return [t for t in await self._inner.tenants_for_recovery() if t in self._allowed]
+
 
 @pytest.fixture()
 def shop(db: PgDatabase) -> Shop:
@@ -125,7 +130,7 @@ async def open_env(pg: PgDatabase, clock: FakeClock, fake: FakeProvider) -> Asyn
         AsyncConnectionPool(app_url, open=False, min_size=1, max_size=4) as app_pool,
         AsyncConnectionPool(dispatcher_url, open=False, min_size=1, max_size=1) as d_pool,
     ):
-        yield Env(Database(app_pool), Dispatcher(d_pool, clock), clock, fake)
+        yield Env(Database(app_pool), Dispatcher(d_pool, clock), clock, fake, app_pool)
 
 
 Scenario = Callable[[Env], Awaitable[Any]]

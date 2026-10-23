@@ -720,6 +720,70 @@ Stop or pause the pilot on any of these:
   - **P12:** run the monitor as its own container, with `VELORA_MONITOR_PROBE_URL` on the private network. Set up the heartbeat and an external `/readyz` check, and set up the free alert mailbox and heartbeat (AD-35).
 - **Evidence:** see "P10 task evidence" in the status tracker. Migration 0012; tests in `backend/tests/monitoring/` and `backend/tests/test_structured_logs.py`.
 
+### AD-36: P11 implementation choices (backups, restore and recovery mode)
+- **Status:** ADOPTED (delegated), awaiting owner review. It implements AD-21 (backups and restore, recovery mode on every restart) under AD-35 (zero cost: our own backups to free storage).
+- **Scope of the authorisation:** the owner said "Start P11" on 2026-10-23. As with P5–P10, only what works without the OpenWA Go was built:
+  - **Built:** backups, restore and restore verification; recovery mode; the runbooks.
+  - **Not built:** inbound reconciliation (recovery step 3), which waits for V-04. It is a hook, recorded as `skipped` until then.
+  - **Waiting for staging (P12):** the 24-hour backup run, the staging drills, and the runbook walk-throughs.
+  - Nothing was bought, deployed or connected to WhatsApp.
+- **A backup role, `velora_backup`:**
+  - LOGIN, **BYPASSRLS**, a member of `pg_read_all_data`, owns nothing, writes nothing.
+  - FORCE RLS applies even to the table owner, so a dump as the migrator would miss rows or fail; this resolves the AD-26 P11 finding.
+  - *Trade-off:* its password can read every tenant's data. It is kept only on the database host, for the backup job.
+  - *Alternative:* a superuser for backups. Rejected: it can also write and change roles.
+- **What a backup is:** three files under a UTC timestamp, each encrypted:
+  - `roles.sql`: `pg_dumpall --roles-only --no-role-passwords`, so the restore can check every VELORA role's attributes;
+  - `database.dump`: `pg_dump --format=custom`, with grants, RLS settings and policies;
+  - `manifest.json`: row counts per table, the schema version, the tables under FORCE RLS with their policies, the database's own grants (CONNECT, which a plain `pg_dump` leaves out: the P2 finding), and each file's SHA-256.
+
+  The manifest is uploaded last, so a backup without one is incomplete and is never restored. The counts and the dump come from **one exported snapshot**, so a restore is checked row for row.
+- **Role passwords aren't backed up.** They are set again after a restore (runbook R4). This keeps the dumps free of credentials, at the cost of one step in the restore.
+- **Encryption: to a public key.**
+  - The server holds only the public key. The founder keeps the secret key offline (a password manager plus a paper copy), so neither a stolen server nor the bucket can read a backup.
+  - Format: the design of `age` (X25519, HKDF-SHA256, AES-256-GCM in 64 KiB chunks, with a counter and a last-chunk flag), from the standard `cryptography` library: a **new dependency**. Tests show a changed byte, a dropped chunk, reordered chunks and the wrong key are all refused.
+  - *Alternative:* the `age` tool itself. Rejected for now: one more binary on the server and in CI. Our files can't be read by `age`; restore uses `python -m velora.backup`.
+  - **Risk:** losing the secret key means having no backups. The runbook says so in bold.
+- **No plaintext on disk:** pg_dump's output is encrypted from its pipe, in memory; restore decrypts straight into pg_restore's input.
+- **Storage:** a directory (`file://`) or any S3-compatible bucket (`s3://`), so Backblaze B2 or Cloudflare R2 free tiers both work (B5 still has to pick one).
+  - The S3 client signs with AWS Signature V4 using only the standard library. It is checked against AWS's published example.
+  - The job never deletes or overwrites. Old backups go by the **bucket's lifecycle rule** (e.g. 30 days), and the server's storage key should be one **without delete permission**, so a stolen server can't erase the history.
+- **OpenWA session state is never backed up** (P11-T2; the PC-8 default). Only the database is dumped. After a host loss, every restaurant re-links by QR.
+- **Restore** always goes into a **new** database, never over one. It drops that database again if the restore itself fails. It then checks:
+  - every VELORA role, after `setup-roles` from the code, against the backed-up attributes; none may be a superuser, and only the backup role may bypass RLS;
+  - the schema version;
+  - every row count;
+  - FORCE RLS and the policy names on every table that had them;
+  - the database grants;
+  - **tenant isolation as `app_rw`:** with no tenant set it sees nothing, and scoped to each tenant it sees exactly that tenant's rows, in every tenant table.
+
+  Any failed check fails the restore. RPO and RTO are reported for each restore (data age, duration).
+- **Recovery mode on startup** (all nine P11 steps, in order):
+  - **When the outage began:** the worker writes a heartbeat (`worker_heartbeats`, global, no tenant data) every 15 seconds and when it stops. The outage is taken to start one interval after the last heartbeat. After a database restore, that is the backup's last heartbeat.
+  - **Health check:** the database answers, and has the tables this code needs. The runtime role still can't read the migration ledger: the P2 rule was kept rather than loosened.
+  - **One worker at a time:** a session advisory lock, held for the worker's life. Steps 2 and 6 take over every lease and in-flight send, which is safe only with no other worker (AD-19).
+  - **Each tenant in one transaction**, with its `recovery_runs` row, unique per tenant and outage. An interrupted recovery runs again on the next start and skips tenants already done, so a transfer window is never extended twice. If recovery fails, the worker exits without working, and its supervisor restarts it.
+  - **Transfer windows** still open when the outage began are extended by the outage's length. One that had already closed expires as usual.
+  - **In-flight sends** become `unknown`, critical or not: the plan's rule, stricter than the P5 lease rule (which retries non-critical messages if the provider's sends are idempotent).
+  - **One apology per customer:** a customer asked to confirm again (step 4) doesn't also get "we're back" (step 7).
+  - **Rate-limited flush:** recovery sends nothing. The normal sender flushes under its cap (20 per channel per minute).
+  - **Orders placed during recovery:** from the restart until the last customer message received before it has been processed. The dashboard shows "⚠ Placed after a system outage — confirm the order with the customer". Messages that arrive after the restart, e.g. redelivered by the provider, don't count; V-04 may change that.
+  - *Trade-off:* every restart, even a 10-second deploy, voids open summaries, and those customers are asked to confirm again. That is the plan's rule ("every restart runs a recovery mode"). A minimum outage length could be added if it annoys customers in the pilot.
+- **Runbooks:** [`../operations/runbooks.md`](../operations/runbooks.md), with R1 to R6 and the manual fallback, each with detect, act now, fallback, recover and tell. None has been walked through in staging yet.
+- **Findings for later phases:**
+  - **P12:**
+    - run `python -m velora.backup run` hourly (systemd timer or cron);
+    - set `VELORA_MONITOR_EXPECT_BACKUPS=true`;
+    - create the bucket with a lifecycle rule and a no-delete key;
+    - install PostgreSQL 17 client tools, or use `VELORA_BACKUP_PG_TOOLS`;
+    - set the `velora_backup` password;
+    - run the worker under a supervisor that restarts it (recovery exits non-zero on failure);
+    - run the restore drill and the recovery drill in staging, and walk through each runbook.
+  - **V-04:** fill the inbound reconciliation hook (step 3), and decide whether provider redeliveries after a restart count as "during recovery".
+  - **P10 (optional):** alert when the worker's heartbeat is older than a few minutes. Today a stopped worker shows up as a growing queue age, but only when there is work.
+  - **P13:** retention for `outbox_messages`, `inbox_events`, `conversations.context`, `pending_actions.payload` and `payment_evidence` (the P5–P8 findings) is **not** done here. Backups keep whatever the database holds, for as long as the bucket keeps them.
+- **Evidence:** see "P11 task evidence" in the status tracker. Migration 0013; tests in `backend/tests/backup/` and `backend/tests/orders/test_recovery_mode.py`.
+
 ---
 
 ## 3. VALIDATION-DEPENDENT decisions (decided only after the OpenWA trial)
@@ -868,12 +932,17 @@ A few GB of dumps is probably **$0** on R2 or B2, depending on how long dumps ar
 
 ## 8. Items for owner review
 
-1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-34).** They stand unless you reverse them.
+1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-34, AD-36).** They stand unless you reverse them.
    - ~~**AD-30 needs a decision:** may Groq's free tier receive real customer messages?~~ **Decided by AD-35:** yes (zero cost). Switching on Zero Data Retention in Groq's Data Controls is recommended.
    - **AD-31 asks you to confirm:** opted-out customers get no order status messages; a customer can cancel only before acceptance and before a verified payment.
    - **AD-32 asks you to confirm:** the reconciliation report and payment reversal are owner-only (managers can't); a duplicate reference is refused rather than allowed with a warning; the COD first-order limit applies until a customer has a *completed* order; staff confirm the full order total (no partial payments).
    - **AD-33 asks you to confirm:** the dashboard is plain JavaScript with no build step; only the owner sees WhatsApp details and the QR re-link (managers see whether orders are being taken, not the QR); kitchen roles don't see the today summary; updates by polling every 5 seconds.
    - **AD-34 asks you to confirm:** that "Start P10" meant the provider-neutral part before the Go (AD-25 listed P10 as gated); that the founder's dashboard is a command line plus a daily email, not a web page; the alert vendor is now a free tier (AD-35).
+   - **AD-36 asks you to confirm:**
+     - backups are encrypted to a key only you hold offline: **lose it and the backups are unreadable**;
+     - role passwords are set again after a restore;
+     - every restart, even a short one, asks customers with an open summary to confirm again;
+     - one worker at a time.
 2. **The optional customer order-tracking link (§5).** Not approved.
 3. **The validation-dependent decisions V-01 to V-10.** These come back to you with the trial evidence.
 4. **The cost commitment.** Approve only after vendor checks and V-03.

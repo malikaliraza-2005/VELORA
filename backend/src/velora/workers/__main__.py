@@ -6,6 +6,10 @@ This is a composition root: it may import provider adapters through the registry
 Inbound customer messages go to the conversation engine (P6), delivery receipts to the
 outbox. Order timers (P7) expire unpaid transfer orders. The AI proposer is optional
 (`VELORA_GROQ_API_KEY`); without it customers use the numbered menu.
+
+Every start runs recovery mode first (P11, `velora.workers.recovery`), holding the one-worker
+lock. If recovery fails, the worker exits with status 1 and does no work; its supervisor
+starts it again, and recovery resumes where it stopped.
 """
 
 from __future__ import annotations
@@ -28,7 +32,8 @@ from velora.messaging.inbox import InboxProcessor
 from velora.messaging.outbox import OutboxSender, apply_delivery_status
 from velora.messaging.registry import build_providers
 from velora.orders.timers import OrderTimers
-from velora.redaction import configure_logging
+from velora.redaction import configure_logging, error_text
+from velora.workers.recovery import Recovery, RecoveryError, hold_worker_lock
 from velora.workers.runner import Worker
 
 
@@ -36,21 +41,27 @@ async def _run(settings: Settings, app_url: str, dispatcher_url: str) -> None:
     clock = SystemClock()
     providers = build_providers(settings)
     async with (
+        hold_worker_lock(app_url),
         AsyncConnectionPool(app_url, open=False) as app_pool,
         AsyncConnectionPool(dispatcher_url, open=False, min_size=1, max_size=2) as d_pool,
     ):
         db = Database(app_pool)
+        dispatcher = Dispatcher(d_pool, clock)
+        # Inbound reconciliation (step 3) waits for V-04.
+        recovery = Recovery(db, app_pool, dispatcher, clock)
+        report = await recovery.run()
         engine = ConversationEngine(
             clock, providers, build_proposer(settings), ai_timeout=settings.ai_timeout_seconds
         )
         handlers = {"message": engine.handle, "delivery_status": apply_delivery_status}
         worker = Worker(
-            Dispatcher(d_pool, clock),
+            dispatcher,
             InboxProcessor(db, clock, handlers),
             OutboxSender(db, providers, clock),
             ChannelMonitor(db, providers, clock),
             clock,
             timers=OrderTimers(db, clock),
+            recovery=recovery.tracker(report),
         )
         stop = asyncio.Event()
         if sys.platform != "win32":
@@ -69,8 +80,12 @@ def main() -> int:
         return 2
     # psycopg's async mode cannot use the Windows proactor event loop.
     loop = asyncio.SelectorEventLoop if sys.platform == "win32" else None
-    with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(_run(settings, app_url, dispatcher_url), loop_factory=loop)
+    try:
+        with contextlib.suppress(KeyboardInterrupt):
+            asyncio.run(_run(settings, app_url, dispatcher_url), loop_factory=loop)
+    except RecoveryError as exc:
+        print(f"recovery failed; not starting: {error_text(exc)}", file=sys.stderr)
+        return 1
     return 0
 
 
