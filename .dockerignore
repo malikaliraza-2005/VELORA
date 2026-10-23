@@ -1,0 +1,10 @@
+# Build context for infra/docker/app.Dockerfile: only what the image needs. Never secrets.
+*
+!backend/pyproject.toml
+!backend/uv.lock
+!backend/README.md
+!backend/src/
+!web/
+**/__pycache__
+**/*.pyc
+web/tests/

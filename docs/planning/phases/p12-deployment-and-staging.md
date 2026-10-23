@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Authorisation** | **NOT AUTHORISED.** **BLOCKED** until P10, P11 and V-03 are complete. |
+| **Authorisation** | **Authorised 2026-10-23** ("Start P12"), for what works without a server or the OpenWA Go (AD-37). The VM (V-03, B5) and hostname (B12) are owner actions; the timed run, the real port scan, staging and its drills wait for them. The OpenWA container and its two drills wait for the Go (V-01). |
 | **Depends on** | P10, P11, V-03 (VPS size) |
 | **Blocks** | P13 |
 | **Effort (estimate)** | about 1 week |
@@ -17,7 +17,8 @@
 | AD-24: OpenWA on a private network only; no secrets in logs | ADOPTED (delegated) |
 | V-03: VPS size and cost | VALIDATION-DEPENDENT |
 | PC-4: OpenWA hardening baseline | PROPOSED, awaiting review |
-| PC-9: same-region VPS and database | PROPOSED, awaiting review |
+| PC-9: same-region VPS and database | PROPOSED, awaiting review (moot under AD-35: the database is on the VM) |
+| AD-37: P12 implementation choices | ADOPTED (delegated) |
 | Infrastructure cost | **$0 a month** (AD-35). Free-tier terms to verify (B5); the old price sheet is for reference only ([price sheet](../../architecture/architecture-decisions.md#6-cost-estimates-not-verified-recheck-before-committing)) |
 
 ## Objective and scope
@@ -84,6 +85,10 @@
 - Rollback is demonstrated.
 - An external port scan shows only the expected ports.
 - All failure drills pass with the alerts firing.
+
+## Where it lives
+- The guide (from scratch, releases, rollback, staging, drill record): [`../../operations/deployment.md`](../../operations/deployment.md).
+- The files: [`../../../infra/`](../../../infra/). The CI rehearsal: `infra/tests/stack-drill.sh`.
 
 ## Risks and rollback
 - **Rollback:** roll back to the previous image tags; pinned OpenWA versions.

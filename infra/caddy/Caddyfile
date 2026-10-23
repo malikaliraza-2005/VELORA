@@ -1,0 +1,46 @@
+# The edge (P12-T3): HTTPS for the dashboard and API, in front of `api` on the edge network.
+# VELORA_DOMAIN and VELORA_TLS come from /etc/velora/stack.env (see compose.yaml).
+
+{
+	# No admin endpoint: configuration changes go through a release.
+	admin off
+	# Port 80 is closed (only 443 is open): no HTTP redirects, and certificates are issued
+	# over 443 (TLS-ALPN challenge).
+	auto_https disable_redirects
+	# UDP 443 is closed too, so don't advertise HTTP/3.
+	servers {
+		protocols h1 h2
+	}
+}
+
+(tls_acme) {
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+}
+
+# Caddy's own certificate authority: rehearsal stacks that the internet can't reach.
+(tls_internal) {
+	tls internal
+}
+
+{$VELORA_DOMAIN} {
+	import tls_{$VELORA_TLS}
+
+	header {
+		# HTTPS only for a year. Not preloaded: a preload is hard to undo.
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+		-Via
+	}
+
+	request_body {
+		max_size 5MB
+	}
+
+	# Caddy replaces any X-Forwarded-For sent by the client with the client's real address;
+	# the API trusts the header only from Caddy (VELORA_FORWARDED_ALLOW_IPS).
+	reverse_proxy api:8000
+}

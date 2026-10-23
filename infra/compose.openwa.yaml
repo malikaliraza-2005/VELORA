@@ -1,0 +1,37 @@
+# OpenWA on its own internal network (P12-T2, AD-24, PC-4). NOT IN USE: the OpenWA adapter
+# and this container wait for the live validation and the owner's Go (V-01). The image is
+# pinned to the exact version validated in P0; there is no default on purpose.
+#
+#   infra/bin/velora reads this file only when VELORA_OPENWA=enabled is in stack.env.
+#
+# The rules, checked by tests/deploy/test_compose_policy.py:
+#   - no published port: reachable only from api and worker, on the internal `openwa`
+#     network. It reaches WhatsApp's servers through its own outbound-only network;
+#   - its dashboard is never exposed;
+#   - its session volume is never backed up (P11-T2, PC-8).
+
+services:
+  openwa:
+    image: "${VELORA_OPENWA_IMAGE:?pin the version validated in P0 (V-01)}"
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: local
+      options: {max-size: "10m", max-file: "5"}
+    volumes: ["openwa_sessions:/sessions"]
+    mem_limit: 1g
+    networks: [openwa, openwa_egress]
+
+  api:
+    networks: [openwa]
+
+  worker:
+    networks: [openwa]
+
+networks:
+  openwa:
+    internal: true
+  openwa_egress: {}
+
+volumes:
+  openwa_sessions: {}
