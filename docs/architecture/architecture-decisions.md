@@ -925,7 +925,7 @@ Stop or pause the pilot on any of these:
   - **Why these periods:** 30 days covers payment disputes and staff follow-up in a pilot. The research's 90-day chat logs were cut to 30 (data minimisation, AD-24). One year matches the research's purge period for customer records. The periods are code constants, so they're easy to change after review.
   - **Batches are picked in a CTE:** `id IN (SELECT … LIMIT n FOR UPDATE SKIP LOCKED)` can be re-run by the planner and change more than `n` rows. A test caught this.
   - **No migration and no new grants:** `app_rw` already had the needed rights, and work discovery reuses the dispatcher's tenant list.
-  - **Evidence:** `tests/retention/` (8 tests: the schedule end to end through real chats and orders, an open order, batching, forgetting, refusals, the command line, the hourly worker sweep).
+  - **Evidence:** PR #19, [CI run 40103170326](https://github.com/malikaliraza-2005/VELORA/actions/runs/40103170326) (1045 tests). `tests/retention/` (8 tests: the schedule end to end through real chats and orders, an open order, batching, forgetting, refusals, the command line, the hourly worker sweep).
 - **Worker-stopped alert** (the AD-36 finding): migration **0014** lets `velora_monitor` read `worker_heartbeats`, which is global and holds no tenant data.
   - The new rule `worker_down` (critical) fires when the heartbeat is over 3 minutes old, or when no worker has ever run.
   - It applies from staging on (`VELORA_MONITOR_EXPECT_WORKER`, default on when deployed).
@@ -966,7 +966,7 @@ Stop or pause the pilot on any of these:
   OpenWA's test event is sent only once, so retry timings stay for T1.1.
 - **Seen while building it (T3.7, to confirm in the trial):** OpenWA v0.25.0 writes the admin key into its log at first boot, **even when the key is supplied** (`API_MASTER_KEY`). The kit's README tells the founder to treat the logs as secret.
   - **Finding for P5-T2:** after first boot, mint a new admin key and revoke the first one, and keep OpenWA's logs out of shared logging.
-- **Evidence:** `backend/tests/trial/` (7 tests: the recorder's records and signature checks, its modes, the hang, masking that keeps timestamps, ignored secrets, the localhost-only ports and the baseline on the configuration compose runs). CI lints the kit and shellchecks its scripts.
+- **Evidence:** PR #19, CI run 40103170326. `backend/tests/trial/` (7 tests: the recorder's records and signature checks, its modes, the hang, masking that keeps timestamps, ignored secrets, the localhost-only ports and the baseline on the configuration compose runs). CI lints the kit and shellchecks its scripts.
 
 ---
 
