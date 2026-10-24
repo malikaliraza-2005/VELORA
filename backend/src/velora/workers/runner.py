@@ -1,4 +1,5 @@
 """The worker loop (P5, P7): health poll, inbox, order timers and outbox, tenant by tenant.
+Once an hour it also sweeps every tenant's old personal data (AD-38, `velora.retention`).
 
 Each round asks the dispatcher which tenants have work, then works on each inside its own
 tenant scope. One tenant's failure is logged (redacted) and doesn't stop the others. Each
@@ -23,11 +24,13 @@ from velora.messaging.inbox import InboxProcessor
 from velora.messaging.outbox import OutboxSender
 from velora.orders.timers import OrderTimers
 from velora.redaction import error_text
+from velora.retention import Retention, due
 from velora.workers.recovery import RecoveryTracker
 
 log = logging.getLogger(__name__)
 
 ROUND_INTERVAL = timedelta(seconds=1)
+RETENTION_INTERVAL = timedelta(hours=1)
 
 
 class Worker:
@@ -42,6 +45,7 @@ class Worker:
         health_interval: timedelta = HEALTH_POLL_INTERVAL,
         timers: OrderTimers | None = None,
         recovery: RecoveryTracker | None = None,
+        retention: Retention | None = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._inbox = inbox
@@ -52,6 +56,8 @@ class Worker:
         self._clock = clock
         self._health_interval = health_interval
         self._last_poll: datetime | None = None
+        self._retention = retention
+        self._last_sweep: datetime | None = None
 
     async def run_round(self) -> None:
         with log_context(correlation_id=new_correlation_id()):
@@ -72,6 +78,9 @@ class Worker:
                         await self._monitor.poll(tenant)
                 except Exception as exc:
                     log.error("health poll failed for %s: %s", tenant.value, error_text(exc))
+        if self._retention is not None and due(self._last_sweep, now, RETENTION_INTERVAL):
+            self._last_sweep = now
+            await self._sweep(self._retention)
         for tenant in await self._dispatcher.tenants_with_work(self._inbox.event_types):
             try:
                 with log_context(tenant=tenant):
@@ -84,6 +93,16 @@ class Worker:
                     await self._outbox.run_once(tenant)
             except Exception as exc:
                 log.error("queue work failed for %s: %s", tenant.value, error_text(exc))
+
+    async def _sweep(self, retention: Retention) -> None:
+        for tenant in await self._dispatcher.tenants_for_recovery():
+            try:
+                with log_context(tenant=tenant):
+                    report = await retention.sweep(tenant)
+                if report.total:
+                    log.info("retention for %s: %s", tenant.value, report)
+            except Exception as exc:
+                log.error("retention failed for %s: %s", tenant.value, error_text(exc))
 
     async def run_forever(self, stop: asyncio.Event) -> None:
         while not stop.is_set():

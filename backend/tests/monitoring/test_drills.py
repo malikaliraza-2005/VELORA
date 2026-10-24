@@ -4,6 +4,7 @@
 2. Disconnect a session: the phone is unlinked; the worker's health poll records `needs_qr`.
 3. Fill the dead-letter queue: inbox events that keep failing until they are `failed`.
 4. Fail a backup: the backup job reports a failed run.
+5. Stop the worker: its heartbeat goes silent (AD-38).
 
 Each drill also checks that the alert is recorded in `alert_events`, is not repeated on the
 next cycle, and is resolved once the problem is gone. The notifier is a recording stand-in:
@@ -27,6 +28,7 @@ from velora.monitoring.alerts import AlertManager, AlertStore, RuleSettings
 from velora.monitoring.metrics import record_backup
 from velora.monitoring.notify import NotifyError, ReadinessProbe
 from velora.monitoring.runner import Monitor
+from velora.workers.recovery import Heartbeat
 from velora.workers.runner import Worker
 
 RULES = RuleSettings(expect_backups=False, backup_max_age=timedelta(hours=2))
@@ -181,6 +183,37 @@ def test_drill_fail_a_backup(run: Any) -> None:
     sent, resolved = run(scenario)
     (alert,) = sent
     assert alert.severity == "critical" and "disk full" in alert.title
+    assert resolved == 1
+
+
+def test_drill_stop_the_worker(run: Any) -> None:
+    async def scenario(mon: MonEnv) -> list[Any]:
+        rules = RuleSettings(
+            expect_backups=False, backup_max_age=timedelta(hours=2), expect_worker=True
+        )
+        monitor = Monitor(
+            mon.connect,
+            mon.env.clock,
+            AlertManager(AlertStore(mon.connect), [mon.notifier]),
+            rules,
+            notifiers=[mon.notifier],
+            daily_report=False,
+        )
+        heartbeat = Heartbeat(mon.env.pool)
+        started = mon.env.clock.now()
+        await heartbeat.beat(started_at=started, at=started)
+        await monitor.cycle()
+        quiet = fired(mon, "worker_down")
+        mon.env.clock.advance(timedelta(minutes=4))  # the drill: the worker stops beating
+        await monitor.cycle()
+        sent = [n for n in mon.notifier.sent if n.key == "worker_down"]
+        await heartbeat.beat(started_at=mon.env.clock.now(), at=mon.env.clock.now())
+        await monitor.cycle()
+        return [quiet, sent, fired(mon, "worker_down", "resolved")]
+
+    quiet, sent, resolved = run(scenario)
+    (alert,) = sent
+    assert quiet == 0 and alert.severity == "critical" and "silent for 4 min" in alert.title
     assert resolved == 1
 
 

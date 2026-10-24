@@ -211,7 +211,7 @@ Any warning, restriction or ban on a test number **stops that engine's tests imm
 
 The application is built behind `WhatsAppProvider`, so a restaurant can move to the Meta adapter without the order, payment or database code changing.
 
-## 9. Reduced trial variant (PROPOSED, not approved; 2026-10-21)
+## 9. Reduced trial variant (ADOPTED (delegated), AD-39, 2026-10-24; awaiting owner review)
 
 **Why:** the owner can currently provide only their own phone and, later, one prepaid SIM. There are no volunteers, no always-on machine and no budget yet. The full plan in §3 assumes 3 SIMs, 3–4 customer phones, at least 20 volunteers and a VPS.
 
@@ -243,7 +243,7 @@ The application is built behind `WhatsAppProvider`, so a restaurant can move to 
 - The Go/No-Go recommendation must list every such gap.
 - The owner can choose to accept specific gaps **in writing**. That acceptance is recorded as a risk, not as a pass.
 
-**Owner decision needed:** approve this variant, or keep the full plan (§3–5).
+**Decision:** adopted under the owner's delegation of 2026-10-24 (AD-39). The owner can still keep the full plan instead (§3–5). The kit is in [`../../trial/`](../../trial/).
 
 ## 10. Desk review of OpenWA source and docs (P0-E2, 2026-10-21)
 
@@ -330,6 +330,7 @@ The application is built behind `WhatsAppProvider`, so a restaurant can move to 
   - There's no built-in TLS.
   - Swagger is off in production mode.
 - **VERIFIED: QR codes not logged on whatsapp-web.js.** The Baileys logging path wasn't checked. → LIVE TEST.
+- **SEEN while building the kit (2026-10-24, no number linked):** v0.25.0 writes the admin key into its log at first boot even when it is supplied as `API_MASTER_KEY`. To be confirmed and recorded under T3.7.
 
 ### 10.4 Messaging (G4)
 - **VERIFIED: sending.**
@@ -356,8 +357,8 @@ The application is built behind `WhatsAppProvider`, so a restaurant can move to 
   - Docker defaults to `OPENWA_MEM_LIMIT=2g`.
 - **VERIFIED: disclaimer.** The README says "always a non-zero risk of account restriction or ban". The user is responsible for compliance with WhatsApp's terms, and it's **not** for regulated deployments.
 
-### 10.6 What the desk review changes for the live trial (proposed; owner approval needed)
-These are proposals. The original test cases in §4 stay in force until the owner approves changes.
+### 10.6 What the desk review changes for the live trial (ADOPTED (delegated), AD-39)
+Adopted for the trial (AD-39): T3.9 joins G3, the baseline is the kit's configuration, and the added checks are in the evidence log template. The original test cases in §4 stay in force.
 
 1. **Add T3.9 (linking):** record whether a passkey prompt (#560) blocks linking. If it does, the trial stops at that step, which is a No-Go risk.
 2. **Trial configuration baseline:**
@@ -393,8 +394,8 @@ These are proposals. The original test cases in §4 stay in force until the owne
 
 **Before you start:**
 - Written for someone without technical experience.
-- **Do not begin** until the owner has approved the trial variant (§9) **and** the trial tooling (status task P0-E1).
-- Commands and web addresses below are placeholders. The exact ones will be in the trial tooling README.
+- The variant and the tooling are adopted (AD-39). **Do not begin** without the test SIM.
+- The exact commands are in [`../../trial/README.md`](../../trial/README.md).
 
 ### Part 1: Phone (about 15 minutes)
 1. Buy **one prepaid Pakistani SIM** registered to your CNIC. **Don't use your personal WhatsApp number** for the test business.
@@ -411,9 +412,10 @@ These are proposals. The original test cases in §4 stay in force until the owne
 3. In Windows **Settings → Power**, set **Sleep: Never** while the test runs, so the computer doesn't sleep in the middle of a test.
 
 ### Part 3: Start the test tools (about 10 minutes)
-1. Copy the `trial/` folder (prepared by Claude after P0-E1 is approved) onto the computer.
-2. Open the folder, right-click an empty area, choose **Open in Terminal**, and type the start command from the trial README, typically:
+1. Use the `trial/` folder of the repository on the computer.
+2. Open the folder, right-click an empty area, choose **Open in Terminal**, and run:
    ```
+   powershell -ExecutionPolicy Bypass -File setup.ps1
    docker compose up -d
    ```
 3. Check that it's running with:

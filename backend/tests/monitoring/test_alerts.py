@@ -138,6 +138,19 @@ def test_backups() -> None:
     assert keys(old, rules=expecting) == ["backup_stale"]
 
 
+def test_a_silent_worker() -> None:
+    expecting = RuleSettings(
+        expect_backups=False, backup_max_age=timedelta(hours=2), expect_worker=True
+    )
+    assert keys(Snapshot(at=T0)) == []  # not expected (development, tests)
+    assert keys(Snapshot(at=T0), rules=expecting) == ["worker_down"]
+    alive = Snapshot(at=T0, worker_last_seen=T0 - timedelta(seconds=40))
+    assert keys(alive, rules=expecting) == []
+    silent = Snapshot(at=T0, worker_last_seen=T0 - timedelta(minutes=4))
+    (alert,) = evaluate(silent, now=T0, probe_failures=0, probe=None, rules=expecting)
+    assert alert.key == "worker_down" and "silent for 4 min" in alert.summary
+
+
 # Manager ----------------------------------------------------------------------------------
 
 

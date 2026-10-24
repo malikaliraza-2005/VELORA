@@ -1,6 +1,6 @@
 # VELORA architecture decisions
 
-- **Last updated:** 2026-10-23
+- **Last updated:** 2026-10-24
 - **Basis:**
   - The architecture review of the research documents (Critic / Defender / Independent Judge).
   - The owner decision session (A1–A12).
@@ -899,6 +899,75 @@ Stop or pause the pilot on any of these:
   - **Once the hostname is chosen (B12):** keep it. The dashboard is an installed app (PWA) tied to its origin, and HSTS is cached for a year.
 - **Evidence:** see "P12 task evidence" in the status tracker. Files are in `infra/`; tests are in `backend/tests/deploy/` and `backend/tests/db/test_provision.py`; the guide is [`../operations/deployment.md`](../operations/deployment.md).
 
+### AD-38: Local completion (data retention, worker alert, pilot documents)
+- **Status:** ADOPTED (delegated), awaiting owner review. On 2026-10-24 the owner said: "Get everything you can do completed with your best possible decisions." That was read as authorising the work that needs no server, no SIM and no OpenWA Go, with every choice recorded here for review.
+- **Not covered:** APPROVED decisions are unchanged. In particular, the OpenWA adapter still waits for the Go (AD-25), and nothing is deployed (AD-37).
+- **Data retention** (the P5–P8, P11 and P13 findings): `velora.retention`. The worker sweeps every tenant once an hour, as `app_rw`, in batches of 500:
+
+  | What | Kept for | Then |
+  |---|---|---|
+  | Message text and the customer's number in the inbox and outbox | 30 days after the message finished | replaced by `{"redacted": true}`; status and times stay, for the counts |
+  | Order confirmations (cart, quote, address) | 30 days after use, voiding or expiry | redacted |
+  | A conversation's cart and checkout details | 30 days without activity | reset to `idle`, as a new conversation |
+  | Delivery address and note on a finished order | 90 days | removed |
+  | The customer's number and name | 1 year without a conversation or an order | anonymised (the P2 `anonymise_customer`) |
+
+  - **Kept:** orders, items, amounts, payments, transitions and the audit log, as the business and tax record. A customer with an order in progress is never anonymised.
+  - **Payment evidence:** its rows stay. `payment_evidence` is immutable (P8) and holds only the provider's media handle. The media itself goes with OpenWA's own retention (`MESSAGE_RETENTION_DAYS=30`, PC-7, set in the trial kit).
+  - **Forgetting on request:** `velora retention forget --tenant SLUG --phone +92…`, run by the founder. It:
+    - refuses while the customer has an order in progress;
+    - cancels queued replies to them;
+    - voids an open confirmation before redacting it, so a later YES can't reach its contents;
+    - resets their conversation and anonymises them;
+    - audits the action without the phone number.
+
+    *Trade-off:* a COD block on that customer is lost with the number.
+  - **Why these periods:** 30 days covers payment disputes and staff follow-up in a pilot. The research's 90-day chat logs were cut to 30 (data minimisation, AD-24). One year matches the research's purge period for customer records. The periods are code constants, so they're easy to change after review.
+  - **Batches are picked in a CTE:** `id IN (SELECT … LIMIT n FOR UPDATE SKIP LOCKED)` can be re-run by the planner and change more than `n` rows. A test caught this.
+  - **No migration and no new grants:** `app_rw` already had the needed rights, and work discovery reuses the dispatcher's tenant list.
+  - **Evidence:** `tests/retention/` (8 tests: the schedule end to end through real chats and orders, an open order, batching, forgetting, refusals, the command line, the hourly worker sweep).
+- **Worker-stopped alert** (the AD-36 finding): migration **0014** lets `velora_monitor` read `worker_heartbeats`, which is global and holds no tenant data.
+  - The new rule `worker_down` (critical) fires when the heartbeat is over 3 minutes old, or when no worker has ever run.
+  - It applies from staging on (`VELORA_MONITOR_EXPECT_WORKER`, default on when deployed).
+  - `velora monitor status` shows "Worker last seen".
+  - **Evidence:** a drill (`test_drills.py::test_drill_stop_the_worker`: the worker stops beating; alert; resolved when it beats again), rule tests, and the monitor-role test.
+- **Pilot documents** (P13-T1 preconditions):
+  - [`../operations/consent-form.md`](../operations/consent-form.md): the restaurant pilot agreement, version `2026-10`. Its Parts A, B and C match the three consent kinds the onboarding tool records (`separate_number_ban_risk`, `data_processing`, `terms`). **It is not legal advice** (AD-35).
+  - [`../operations/owner-verification.md`](../operations/owner-verification.md): how to check the person, the business and the phones, with free sources (original CNIC in person, FBR NTN lookup, food-authority licence, listings, a visit). It also covers how to record it, red flags, and manual account recovery.
+- **Corrections:** the status tracker's P0 and P6 rows no longer list the lawyer and accountant, or the Groq decision, as open (both settled by AD-35).
+
+### AD-39: The reduced OpenWA trial and its kit (P0-E1)
+- **Status:** ADOPTED (delegated), awaiting owner review; the same delegation as AD-38. **No gate is passed by this.** G1–G5 stay NOT STARTED until the live tests produce evidence.
+- **The reduced trial variant** ([validation plan §9](../planning/openwa-validation-plan.md)) is adopted. It needs one test SIM, the owner's own phone as the customer, and the owner's Windows computer.
+  - The tests it can't answer stay **INSUFFICIENT EVIDENCE**: T4.1, T3.6, T2.3, T5.3, and T5.2 unless the computer is left on for 14 days.
+  - Under the unchanged gate rule, **G4 and G5 cannot pass on this variant alone.** The Go/No-Go must list each gap, and the owner can accept a gap only in writing, as a risk.
+  - *Why:* it is the only variant the owner's resources allow (one SIM, no volunteers, no server). It still answers G1, G2, most of G3 and G4, and short-term resources.
+- **The desk review's proposed changes (§10.6) are adopted for the trial:**
+  - T3.9 (passkey linking) is added;
+  - the configuration baseline is used;
+  - the reconciliation, send-idempotency and log checks are added.
+- **The kit** is in [`../../trial/`](../../trial/). It is throwaway test tooling, not product code:
+  - `compose.yaml`: OpenWA **v0.25.0**, the version the desk review read, pinned by digest. It uses the published image and OpenWA's own container hardening.
+    - **Not used:** OpenWA's Docker-socket proxy, which its own docs describe as root-equivalent if the API is compromised.
+    - PostgreSQL storage on an internal network.
+    - The API and dashboard on `127.0.0.1:2785` only.
+    - The baseline: 5 webhook attempts, failed payloads kept 72 h, the admin key and pepper set before first boot, a reconnect limit of 10, messages kept 30 days, no simulated typing (AD-24).
+  - `recorder.py`: every webhook, as received, to `evidence/webhooks-<date>.jsonl`, with its HMAC check. It answers 200, 500, or hangs past OpenWA's 10-second timeout, switchable while it runs.
+  - `trial.py`: link a session (with the signed webhook), status, recorder mode, saved message history (G2), failed deliveries, a send with an idempotency key (T4.3), logout, and phone-number masking for sharing.
+  - Setup scripts that write `.env` with random secrets, resource samplers (T5.1), and the evidence log template with every reduced-variant test.
+  - Evidence and `.env` are git-ignored.
+- **Checked while building it** (2026-10-24, on the owner's computer, **no WhatsApp number linked**):
+  - the stack starts healthy;
+  - a session is created and reaches `qr_ready`;
+  - the webhook registers through the SSRF allowlist;
+  - OpenWA's test events reach the recorder with **valid signatures**;
+  - the recorder's error mode answers 500.
+
+  OpenWA's test event is sent only once, so retry timings stay for T1.1.
+- **Seen while building it (T3.7, to confirm in the trial):** OpenWA v0.25.0 writes the admin key into its log at first boot, **even when the key is supplied** (`API_MASTER_KEY`). The kit's README tells the founder to treat the logs as secret.
+  - **Finding for P5-T2:** after first boot, mint a new admin key and revoke the first one, and keep OpenWA's logs out of shared logging.
+- **Evidence:** `backend/tests/trial/` (7 tests: the recorder's records and signature checks, its modes, the hang, masking that keeps timestamps, ignored secrets, the localhost-only ports and the baseline on the configuration compose runs). CI lints the kit and shellchecks its scripts.
+
 ---
 
 ## 3. VALIDATION-DEPENDENT decisions (decided only after the OpenWA trial)
@@ -1047,7 +1116,7 @@ A few GB of dumps is probably **$0** on R2 or B2, depending on how long dumps ar
 
 ## 8. Items for owner review
 
-1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-34, AD-36, AD-37).** They stand unless you reverse them.
+1. **Every ADOPTED (delegated) decision (AD-11 to AD-24, AD-26 to AD-34, AD-36 to AD-39).** They stand unless you reverse them.
    - ~~**AD-30 needs a decision:** may Groq's free tier receive real customer messages?~~ **Decided by AD-35:** yes (zero cost). Switching on Zero Data Retention in Groq's Data Controls is recommended.
    - **AD-31 asks you to confirm:** opted-out customers get no order status messages; a customer can cancel only before acceptance and before a verified payment.
    - **AD-32 asks you to confirm:** the reconciliation report and payment reversal are owner-only (managers can't); a duplicate reference is refused rather than allowed with a warning; the COD first-order limit applies until a customer has a *completed* order; staff confirm the full order total (no partial payments).
@@ -1065,6 +1134,14 @@ A few GB of dumps is probably **$0** on R2 or B2, depending on how long dumps ar
      - a rollback never reverts migrations, so each release's migrations must work with the previous code;
      - automatic security updates may reboot the server at 05:00 PKT;
      - if the free tier gives one usable VM, staging runs there first and is then rebuilt as production.
+   - **AD-38 asks you to confirm:**
+     - the retention periods: 30 days for message text, confirmations and carts; 90 days for delivery addresses; 1 year for an inactive customer's number and name. Orders and amounts are kept;
+     - forgetting a customer is a founder command, refused while they have an order in progress;
+     - the consent form's wording (a draft, not legal advice) and the owner-verification checks.
+   - **AD-39 asks you to confirm:**
+     - the reduced trial variant: G4 and G5 can't pass on it alone, so a Go would need your written acceptance of the listed gaps;
+     - the desk review's trial baseline and added tests (§10.6);
+     - OpenWA v0.25.0, Baileys first.
 2. **The optional customer order-tracking link (§5).** Not approved.
 3. **The validation-dependent decisions V-01 to V-10.** These come back to you with the trial evidence.
 4. **The cost commitment.** Approve only after vendor checks and V-03.

@@ -29,6 +29,11 @@ jobs:
         run: uv run ruff check .
       - name: Type check
         run: uv run mypy
+      # P0-E1: the OpenWA trial kit is standard-library Python outside the package.
+      - name: Lint the trial kit
+        run: |
+          uv run ruff format --config pyproject.toml --check ../trial
+          uv run ruff check --config pyproject.toml ../trial
       # P2: database tests need a disposable PostgreSQL 17. The superuser password is
       # generated per run; the test session sets random passwords for the VELORA roles.
       - name: Start PostgreSQL 17
@@ -64,7 +69,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Lint the shell scripts
-        run: shellcheck infra/bin/velora infra/host/install.sh infra/tests/stack-drill.sh
+        run: shellcheck infra/bin/velora infra/host/install.sh infra/tests/stack-drill.sh trial/setup.sh trial/sample-resources.sh
       - name: Rehearse a deployment, the failure drills, a release and a rollback
         env:
           VELORA_DRILL_RECORD: ${{ runner.temp }}/drill-record.md

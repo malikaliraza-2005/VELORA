@@ -13,6 +13,7 @@
 | `ingress_rejections` | 5 or more refused webhooks in 15 minutes | warning |
 | `backup_failed` | the latest backup run failed | critical |
 | `backup_stale` | no good backup within the allowed age (once backups are expected) | critical |
+| `worker_down` | no worker heartbeat for 3 minutes (once a worker is expected) | critical |
 
 **The manager** sends each problem once when it starts, again when it grows (its `level`, e.g.
 the number of dead letters) or every 4 hours while it lasts, and once when it clears. Each
@@ -42,6 +43,8 @@ INGRESS_REJECTION_LIMIT = 5
 PROBE_FAILURES_LIMIT = 2
 REMIND_EVERY = timedelta(hours=4)
 RETRY_UNDELIVERED = timedelta(minutes=5)
+# The worker beats every 15 seconds (P11); a restart takes seconds.
+WORKER_SILENT_AFTER = timedelta(minutes=3)
 
 Severity = Literal["warning", "critical"]
 
@@ -58,6 +61,8 @@ class Alert:
 class RuleSettings:
     expect_backups: bool
     backup_max_age: timedelta
+    # A worker is expected (staging and production): alert when its heartbeat is too old.
+    expect_worker: bool = False
 
 
 def _minutes(delta: timedelta) -> int:
@@ -150,6 +155,13 @@ def evaluate(
                 f"The {last.kind} backup failed" + (f": {last.detail}" if last.detail else "."),
             )
         )
+    if rules.expect_worker:
+        seen = snapshot.worker_last_seen
+        if seen is None or now - seen > WORKER_SILENT_AFTER:
+            since = "has never run" if seen is None else f"silent for {_minutes(now - seen)} min"
+            alerts.append(
+                Alert("worker_down", "critical", f"The worker {since}: no messages are handled.")
+            )
     if rules.expect_backups:
         good = snapshot.last_good_backup
         if good is None or now - good > rules.backup_max_age:

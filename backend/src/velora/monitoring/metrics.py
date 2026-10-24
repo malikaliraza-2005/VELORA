@@ -73,6 +73,8 @@ class Snapshot:
     ingress_rejections: dict[str, int] = field(default_factory=dict)
     last_backup: BackupRun | None = None
     last_good_backup: datetime | None = None
+    # The worker's last heartbeat (P11, every 15 seconds); None if it never ran.
+    worker_last_seen: datetime | None = None
     funnel: Funnel = field(default_factory=Funnel)
 
     @property
@@ -149,6 +151,8 @@ async def collect(conn: AsyncConnection[Any], now: datetime) -> Snapshot:
         last = await cur.fetchone()
         cur = await conn.execute("SELECT max(created_at) FROM velora.backup_runs WHERE ok")
         (last_good,) = expect_row(await cur.fetchone())
+        cur = await conn.execute("SELECT max(last_seen_at) FROM velora.worker_heartbeats")
+        (worker_seen,) = expect_row(await cur.fetchone())
         starts, ends = pk_day_bounds(now.astimezone(PKT).date())
         cur = await conn.execute(
             """
@@ -184,6 +188,7 @@ async def collect(conn: AsyncConnection[Any], now: datetime) -> Snapshot:
         ingress_rejections=rejections,
         last_backup=None if last is None else BackupRun(*last),
         last_good_backup=last_good,
+        worker_last_seen=worker_seen,
         funnel=funnel,
     )
 

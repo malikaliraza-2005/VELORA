@@ -51,6 +51,7 @@ def status_text(snapshot: Snapshot, alerts: list[Alert]) -> str:
             f"at {_when(s.last_backup.at)}"
         )
         + f"; last good {_when(s.last_good_backup)}",
+        f"Worker last seen:  {_when(s.worker_last_seen)}",
         f"Orders today:      {f.placed} placed: {f.awaiting} awaiting, {f.in_progress} in "
         f"progress, {f.completed} completed, {f.cancelled} cancelled or rejected, "
         f"{f.expired} expired, {f.refund_pending} refund pending",

@@ -27,9 +27,9 @@
 - **Objective:** a controlled real-world pilot.
 - **Preconditions:**
   - P12 complete.
-  - Consent form finalised (drafted by engineering; not legal advice, AD-35).
+  - Consent form finalised (drafted by engineering; not legal advice, AD-35). **Drafted:** [`../../operations/consent-form.md`](../../operations/consent-form.md) (AD-38); the owner finalises it.
   - Tax values set by the owner from public sources (AD-35).
-  - Owner-verification runbook ready.
+  - Owner-verification runbook ready. **Written:** [`../../operations/owner-verification.md`](../../operations/owner-verification.md) (AD-38).
   - The owner approves starting the pilot.
 - **Scope:**
   1. **One restaurant, supervised soft launch.** The founder watches the dashboard live for the first few days.
