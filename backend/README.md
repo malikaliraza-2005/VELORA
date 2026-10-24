@@ -172,6 +172,21 @@ python -m velora.backup restore --secret-key backup.key --target-db velora_resto
 
 The full procedures are in [`../docs/operations/runbooks.md`](../docs/operations/runbooks.md).
 
+## Data retention (AD-38)
+
+`src/velora/retention/`: the worker removes old personal data every hour, tenant by tenant:
+- message text and numbers after 30 days;
+- confirmations and carts after 30 days;
+- delivery addresses on finished orders after 90 days;
+- inactive customers anonymised after a year.
+
+Orders and amounts are kept. To forget one customer on request:
+
+```bash
+python -m velora.retention forget --tenant karachi-grill --phone +923001234567   # VELORA_OPERATOR set
+python -m velora.retention run                                                # one sweep now
+```
+
 ## Deployment (P12)
 
 - `python -m velora.serve`: the production server (uvicorn) for `velora.asgi:app`. Its log lines go through the redacting JSON formatter. Forwarding headers are trusted only from the addresses in `VELORA_FORWARDED_ALLOW_IPS` (the edge proxy), so the login rate limit sees real clients.

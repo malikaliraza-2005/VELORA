@@ -1,0 +1,112 @@
+# The OpenWA live trial (P0-E1, reduced variant, AD-39). Throwaway test tooling: it never
+# serves a real restaurant. Run it on the founder's computer: see README.md.
+#
+#   openwa     OpenWA v0.25.0, the version the desk review read (§10), pinned by digest.
+#              Its API and bundled dashboard listen on 127.0.0.1:2785 only: never on the internet.
+#   openwa-db  PostgreSQL, OpenWA's storage (validation plan §3), on an internal network.
+#   recorder   writes every webhook to ./evidence (recorder.py).
+#   tool       `docker compose run --rm tool <command>` (trial.py).
+#
+# The desk review's baseline (§10.6): retries 5 (set per webhook), failed payloads kept for
+# redrive, the admin key set before first boot, the API-key pepper set before first boot,
+# messages kept 30 days (PC-7), no simulated typing (no detection evasion, AD-24).
+# Secrets come from .env, written by setup.ps1 / setup.sh; never commit it.
+
+name: velora-trial
+
+x-python: &python
+  image: python:3.12.15-slim-bookworm@sha256:6a0e06f5ba0b373d051aabd3fffb9b873f27f9a2a3a14bcbe37dee6f0e3bbc70
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  # As the person running the trial, so the evidence files are theirs (setup.sh; 0 on Windows).
+  user: "${TRIAL_UID:-0}:${TRIAL_GID:-0}"
+  environment:
+    TRIAL_EVIDENCE_DIR: /evidence
+    WEBHOOK_SECRET: ${WEBHOOK_SECRET:?run setup.ps1 or setup.sh first}
+    API_MASTER_KEY: ${API_MASTER_KEY:?run setup.ps1 or setup.sh first}
+  volumes:
+    - ./:/kit:ro
+    - ./evidence:/evidence
+
+services:
+  openwa:
+    image: ghcr.io/rmyndharis/openwa:0.25.0@sha256:bb883bd67101b9c985649ebd4e7677dc7ecd9db034c2d164a8f3d522fdd4311d
+    restart: unless-stopped
+    stop_grace_period: 75s
+    # OpenWA's own hardening (its docker-compose.yml): Chromium runs without a sandbox, so the
+    # container is the boundary.
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, KILL, SETGID, SETUID]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 2048
+    mem_limit: 2g
+    ports: ["127.0.0.1:2785:2785"]
+    environment:
+      NODE_ENV: production
+      TZ: UTC
+      HOME: /tmp
+      XDG_CONFIG_HOME: /tmp/.config
+      XDG_CACHE_HOME: /tmp/.cache
+      PORT: "2785"
+      LOG_LEVEL: info
+      ENGINE_TYPE: ${ENGINE_TYPE:-baileys}
+      DATABASE_TYPE: postgres
+      DATABASE_HOST: openwa-db
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: openwa
+      DATABASE_USERNAME: openwa
+      DATABASE_PASSWORD: ${OPENWA_DB_PASSWORD:?run setup.ps1 or setup.sh first}
+      API_MASTER_KEY: ${API_MASTER_KEY:?run setup.ps1 or setup.sh first}
+      API_KEY_PEPPER: ${API_KEY_PEPPER:?run setup.ps1 or setup.sh first}
+      SERVE_DASHBOARD: "true"
+      MESSAGE_RETENTION_DAYS: "30"
+      WEBHOOK_FAILURE_PAYLOAD_RETENTION_HOURS: "72"
+      # The recorder is on a private address, which OpenWA's SSRF guard refuses unless listed.
+      SSRF_ALLOWED_HOSTS: recorder
+      SIMULATE_TYPING: "false"
+      AUTO_START_SESSIONS: "true"
+      NODE_ID: velora-trial
+    volumes: ["openwa-data:/app/data"]
+    networks: [trial, storage]
+    depends_on:
+      openwa-db: {condition: service_healthy}
+
+  openwa-db:
+    image: postgres:17.11-bookworm@sha256:858bb5e98eed02eb8cafbcdc007f9a65d1b613972028944a8ec2133ccaf80d27
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: openwa
+      POSTGRES_USER: openwa
+      POSTGRES_PASSWORD: ${OPENWA_DB_PASSWORD:?run setup.ps1 or setup.sh first}
+    volumes: ["openwa-db:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-h", "127.0.0.1", "-U", "openwa"]
+      interval: 5s
+      retries: 12
+    networks: [storage]
+
+  recorder:
+    <<: *python
+    restart: unless-stopped
+    command: ["python", "/kit/recorder.py"]
+    networks: [trial]
+
+  tool:
+    <<: *python
+    profiles: [tool]
+    entrypoint: ["python", "/kit/trial.py"]
+    networks: [trial]
+
+networks:
+  trial: {}
+  storage:
+    internal: true
+
+volumes:
+  # OpenWA's sessions (WhatsApp logins, in plaintext) and its message store. `docker compose
+  # down -v` deletes them at the end of the trial; never copy them into the evidence.
+  openwa-data: {}
+  openwa-db: {}

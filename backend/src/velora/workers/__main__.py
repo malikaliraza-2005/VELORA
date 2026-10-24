@@ -5,7 +5,8 @@ This is a composition root: it may import provider adapters through the registry
 
 Inbound customer messages go to the conversation engine (P6), delivery receipts to the
 outbox. Order timers (P7) expire unpaid transfer orders. The AI proposer is optional
-(`VELORA_GROQ_API_KEY`); without it customers use the numbered menu.
+(`VELORA_GROQ_API_KEY`); without it customers use the numbered menu. Old personal data is
+removed hourly (AD-38).
 
 Every start runs recovery mode first (P11, `velora.workers.recovery`), holding the one-worker
 lock. If recovery fails, the worker exits with status 1 and does no work; its supervisor
@@ -33,6 +34,7 @@ from velora.messaging.outbox import OutboxSender, apply_delivery_status
 from velora.messaging.registry import build_providers
 from velora.orders.timers import OrderTimers
 from velora.redaction import configure_logging, error_text
+from velora.retention import Retention
 from velora.workers.recovery import Recovery, RecoveryError, hold_worker_lock
 from velora.workers.runner import Worker
 
@@ -62,6 +64,7 @@ async def _run(settings: Settings, app_url: str, dispatcher_url: str) -> None:
             clock,
             timers=OrderTimers(db, clock),
             recovery=recovery.tracker(report),
+            retention=Retention(db, clock),
         )
         stop = asyncio.Event()
         if sys.platform != "win32":

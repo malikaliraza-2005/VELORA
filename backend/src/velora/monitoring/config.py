@@ -61,6 +61,8 @@ class MonitorSettings:
     email: EmailSettings | None = None
     # Backups are expected (P11) from staging on; before that, their absence isn't alerted.
     expect_backups: bool = False
+    # A worker is expected from staging on; its silence is then alerted (AD-38).
+    expect_worker: bool = False
     backup_max_age: timedelta = DEFAULT_BACKUP_MAX_AGE
 
     @property
@@ -99,6 +101,9 @@ class MonitorSettings:
         expect = _optional(source, "VELORA_MONITOR_EXPECT_BACKUPS")
         if expect is not None and expect.lower() not in {"true", "false"}:
             raise ValueError("VELORA_MONITOR_EXPECT_BACKUPS must be true or false")
+        worker = _optional(source, "VELORA_MONITOR_EXPECT_WORKER")
+        if worker is not None and worker.lower() not in {"true", "false"}:
+            raise ValueError("VELORA_MONITOR_EXPECT_WORKER must be true or false")
         age_text = _optional(source, "VELORA_BACKUP_MAX_AGE_MINUTES")
         try:
             age = DEFAULT_BACKUP_MAX_AGE if age_text is None else timedelta(minutes=int(age_text))
@@ -115,6 +120,7 @@ class MonitorSettings:
             webhook_url=_url(source, "VELORA_ALERT_WEBHOOK_URL", https=deployed),
             email=email,
             expect_backups=deployed if expect is None else expect.lower() == "true",
+            expect_worker=deployed if worker is None else worker.lower() == "true",
             backup_max_age=age,
         )
         if deployed and not settings.has_notifier:

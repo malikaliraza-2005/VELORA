@@ -10,7 +10,7 @@ docs/
 ├── architecture/   Recorded architecture decisions, with status for each.
 ├── planning/       MVP scope, implementation plan (master roadmap), status tracker, OpenWA validation plan, local testing guide.
 │   └── phases/     One detailed task file per phase, P0–P13.
-├── operations/     Runbooks (P11) and the deployment guide (P12).
+├── operations/     Runbooks (P11), the deployment guide (P12), the consent form and owner verification (AD-38).
 └── README.md       This file.
 ```
 
@@ -20,7 +20,7 @@ docs/
 | `architecture/` | [`architecture-decisions.md`](architecture/architecture-decisions.md): every major decision with its rationale, alternatives, trade-offs and status. | **Authoritative** for anything marked APPROVED. Items marked ADOPTED (delegated) are authoritative but can be reversed by the owner. |
 | `planning/` | [`mvp-scope.md`](planning/mvp-scope.md), [`implementation-plan.md`](planning/implementation-plan.md) (master roadmap), [`implementation-status.md`](planning/implementation-status.md), [`openwa-validation-plan.md`](planning/openwa-validation-plan.md), [`local-testing-guide.md`](planning/local-testing-guide.md) (try it by hand) | Authoritative plan, derived from the decisions. |
 | `planning/phases/` | `p00-…md` to `p13-…md`: detailed tasks for each phase, each with prerequisites, deliverables, security, tests, acceptance criteria and rollback | Authoritative task detail. **Status is tracked only in `implementation-status.md`.** |
-| `operations/` | [`runbooks.md`](operations/runbooks.md): detection, first action, manual fallback, recovery and communication for each failure (P11-T6), and backup setup. [`deployment.md`](operations/deployment.md): the server from scratch, releases, rollback, staging and the failure-drill record (P12) | Operational procedure, derived from the decisions. |
+| `operations/` | [`runbooks.md`](operations/runbooks.md): detection, first action, manual fallback, recovery and communication for each failure (P11-T6), and backup setup. [`deployment.md`](operations/deployment.md): the server from scratch, releases, rollback, staging and the failure-drill record (P12). [`consent-form.md`](operations/consent-form.md) and [`owner-verification.md`](operations/owner-verification.md): signing up a pilot restaurant (AD-38) | Operational procedure, derived from the decisions. |
 
 ## Precedence
 

@@ -14,6 +14,7 @@
 #   velora restore ARGS...             restore into a NEW database and verify it, e.g.
 #                                      --secret-key FILE --target-db velora_restored
 #   velora admin ARGS...               onboarding tools (python -m velora.admin)
+#   velora retention ARGS...           e.g. `velora retention forget --tenant SLUG --phone +92...`
 #   velora monitor ARGS...             e.g. `velora monitor test-alert`
 #   velora db ARGS...                  e.g. `velora db migrate status`
 #   velora logs SERVICE                follow one container's (redacted) log
@@ -201,9 +202,10 @@ status)
 backup) lock; compose run --rm backup ;;
 restore) restore "$@" ;;
 admin) compose run --rm ops python -m velora.admin "$@" ;;
+retention) compose run --rm ops python -m velora.retention "$@" ;;
 monitor) compose exec -T monitor python -m velora.monitoring "$@" ;;
 db) compose run --rm ops python -m velora.db "$@" ;;
 logs) compose logs -f "${1:?usage: velora logs SERVICE}" ;;
 compose) compose "$@" ;;
-*) sed -n '2,24p' "$SELF" | sed 's/^# \{0,1\}//'; exit 2 ;;
+*) sed -n '2,25p' "$SELF" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

@@ -37,6 +37,7 @@ ALLOWED = [
     "SELECT * FROM velora.global_pause_events",
     "SELECT * FROM velora.backup_runs",
     "SELECT * FROM velora.alert_events",
+    "SELECT name, started_at, last_seen_at FROM velora.worker_heartbeats",
 ]
 
 

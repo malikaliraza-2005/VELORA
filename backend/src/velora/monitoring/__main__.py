@@ -75,7 +75,7 @@ def notifiers_for(settings: MonitorSettings) -> list[Notifier]:
 
 
 def _rules(settings: MonitorSettings) -> RuleSettings:
-    return RuleSettings(settings.expect_backups, settings.backup_max_age)
+    return RuleSettings(settings.expect_backups, settings.backup_max_age, settings.expect_worker)
 
 
 async def _main(args: argparse.Namespace, settings: MonitorSettings, url: str) -> int:
